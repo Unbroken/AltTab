@@ -44,7 +44,7 @@ HWND            g_hAltTabWnd           = nullptr;              // AltTab window 
 bool            g_hAltTabIsbeingClosed = false;                // Is AltTab window being closed
 HWND            g_hFGWnd               = nullptr;              // Foreground window handle
 HWND            g_hMainWnd             = nullptr;              // AltTab main window handle
-HWND            g_hSetingsWnd          = nullptr;              // AltTab settings window handle
+HWND            g_hSettingsWnd         = nullptr;              // AltTab settings window handle
 HWND            g_hCustomToolTip       = nullptr;              // Custom tool tip
 UINT_PTR        g_TooltipTimerId;
 bool            g_TooltipVisible       = false;                // Is tooltip visible or not
@@ -1329,7 +1329,7 @@ DWORD WINAPI ShowCustomToolTipThread(LPVOID pvParam) {
     g_ToolInfo.lpszText = (LPWSTR)tti->ToolTipText.c_str();
 
     SendMessage(g_hCustomToolTip, TTM_SETTOOLINFO  ,    0, (LPARAM)&g_ToolInfo);
-    SendMessage(g_hCustomToolTip, TTM_TRACKPOSITION,    0, (LPARAM)(DWORD)MAKELONG(pt.x + 12, pt.y + 12));
+    SendMessage(g_hCustomToolTip, TTM_TRACKPOSITION,    0, (LPARAM)(DWORD)MAKELONG(pt.x + 0, pt.y + 0));
     SendMessage(g_hCustomToolTip, TTM_TRACKACTIVATE, true, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
     if (duration != -1) {
         AT_LOG_INFO("Start TIMER_CUSTOM_TOOLTIP timer");
@@ -1360,18 +1360,20 @@ void ShowCustomToolTip(const std::wstring& tooltipText, int duration /*= 3000*/)
        g_TooltipTimerId = SetTimer(nullptr, TIMER_CUSTOM_TOOLTIP, duration, HideCustomToolTip);
        g_TooltipVisible = true;
     }
-
-    //// Get mouse coordinates
-    //POINT pt;
-    //GetCursorPos(&pt);
-
-    //g_ToolInfo.lpszText = (LPWSTR)(LPCWSTR)tooltipText.c_str();
-    //SendMessage(g_hCustomToolTip, TTM_SETTOOLINFO,      0, (LPARAM)&g_ToolInfo);
-    //SendMessage(g_hCustomToolTip, TTM_TRACKPOSITION,    0, (LPARAM)(DWORD)MAKELONG(pt.x + 12, pt.y + 12));
-    //SendMessage(g_hCustomToolTip, TTM_TRACKACTIVATE, true, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
-   
-    //g_TooltipTimerId = SetTimer(nullptr, TIMER_CUSTOM_TOOLTIP, duration, HideCustomToolTip);
 #endif // 0
+}
+
+void ShowCustomToolTipAt(const std::wstring& tooltipText, const POINT& pt, int duration /*= 3000*/) {
+    AT_LOG_TRACE;
+    if (!g_TooltipVisible) {
+        g_ToolInfo.lpszText = (LPWSTR)(LPCWSTR)tooltipText.c_str();
+        SendMessage(g_hCustomToolTip, TTM_SETTOOLINFO  , 0   , (LPARAM)&g_ToolInfo);
+        SendMessage(g_hCustomToolTip, TTM_TRACKPOSITION, 0   , (LPARAM)(DWORD)MAKELONG(pt.x, pt.y));
+        SendMessage(g_hCustomToolTip, TTM_TRACKACTIVATE, true, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
+
+        g_TooltipTimerId = SetTimer(nullptr, TIMER_CUSTOM_TOOLTIP, duration, HideCustomToolTip);
+        g_TooltipVisible = true;
+    }
 }
 
 void CALLBACK HideCustomToolTip(HWND /*hWnd*/, UINT /*uMsg*/, UINT_PTR /*idEvent*/, DWORD /*dwTime*/) {

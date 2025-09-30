@@ -30,6 +30,7 @@
 
 HWND           g_hStaticText       = nullptr;
 HWND           g_hListView         = nullptr;
+int            g_nLVHotItem        = -1;
 HFONT          g_hSSFont           = nullptr;
 HFONT          g_hLVFont           = nullptr;
 int            g_SelectedIndex     = 0;
@@ -50,6 +51,36 @@ static BOOL      TerminateProcessEx    (DWORD pid);
 static bool      IsExcludedProcess     (const std::wstring& processName);
 
 std::vector<AltTabWindowData> g_AltTabWindows;
+
+#define LVM_FORWARD_DRAW (WM_USER + 200)
+
+namespace {
+    // Get the file version
+    std::wstring GetFileVersion(const std::wstring& filePath) {
+        DWORD dummy;
+        DWORD verSize = GetFileVersionInfoSizeW(filePath.c_str(), &dummy);
+        if (verSize > 0) {
+            std::vector<BYTE> verData(verSize);
+            if (GetFileVersionInfoW(filePath.c_str(), 0, verSize, verData.data())) {
+                VS_FIXEDFILEINFO* fileInfo = nullptr;
+                UINT len = 0;
+                if (VerQueryValue(verData.data(), _T("\\"), (LPVOID*)&fileInfo, &len)) {
+                    if (fileInfo) {
+                        DWORD major = HIWORD(fileInfo->dwFileVersionMS);
+                        DWORD minor = LOWORD(fileInfo->dwFileVersionMS);
+                        DWORD build = HIWORD(fileInfo->dwFileVersionLS);
+                        DWORD revision = LOWORD(fileInfo->dwFileVersionLS);
+                        // Format: major.minor.build.revision
+                        std::wstring version = std::to_wstring(major) + L"." + std::to_wstring(minor) + L"."
+                                               + std::to_wstring(build) + L"." + std::to_wstring(revision);
+                        return version;
+                    }
+                }
+            }
+        }
+        return L"";
+    }
+}
 
 HICON GetWindowIcon(HWND hWnd) {
     // Try to get the large icon
@@ -110,16 +141,19 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
                     if (IsHungAppWindow(hWnd)) {
                         title += L" (Not Responding)";
                     }
+
                     AltTabWindowData item = { hWnd,
                                               hOwner,
                                               GetWindowIcon(hOwner),
                                               title,
                                               filePath.filename().wstring(),
                                               filePath.wstring(),
-                                              processId };
-                    auto vItems   = (std::vector<AltTabWindowData>*)lParam;
-                    bool insert   = false;
-                    bool excluded = IsExcludedProcess(ToLower(item.ProcessName));
+                                              processId,
+                                              false };
+
+                    auto* vItems   = (std::vector<AltTabWindowData>*)lParam;
+                    bool  insert   = false;
+                    bool  excluded = IsExcludedProcess(ToLower(item.ProcessName));
 
                     // If Alt+Tab is pressed, show all windows
                     if (g_IsAltTab || g_IsAltCtrlTab) {
@@ -312,6 +346,22 @@ void RefreshAltTabWindow() {
     // Enumerate windows
     EnumWindows(EnumWindowsProc, (LPARAM)(&g_AltTabWindows));
 
+    // Identify the processes which are running from different paths
+    std::unordered_map<std::wstring, std::unordered_set<std::wstring>> processMap;
+    for (const auto& item : g_AltTabWindows) {
+        const std::wstring key = item.ProcessName + item.Title;
+        processMap[key].insert(item.FullPath);
+    }
+    for (auto& item : g_AltTabWindows) {
+        const std::wstring key = item.ProcessName + item.Title;
+        if (processMap[key].size() > 1) {
+            item.IsConflictProcess = true;
+
+            // Get the file version
+            item.Version = GetFileVersion(item.FullPath);
+        }
+    }
+
     // Create ImageList and add icons
     HIMAGELIST hImageList =
         ImageList_Create(GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), ILC_COLOR32 | ILC_MASK, 0, 1);
@@ -483,10 +533,11 @@ HWND CreateAltTabWindow() {
 
 void AddListViewItem(HWND hListView, int index, const AltTabWindowData& windowData) {
     LVITEM lvItem    = {0};
-    lvItem.mask      = LVIF_TEXT | LVIF_IMAGE;
+    lvItem.mask      = LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM;
     lvItem.iItem     = index;
     lvItem.iSubItem  = 0;
     lvItem.iImage    = index;
+    lvItem.lParam    = (LPARAM)(&windowData);
 
     ListView_InsertItem(hListView, &lvItem);
     ListView_SetItem(hListView, &lvItem);
@@ -575,11 +626,11 @@ LRESULT CALLBACK ListViewSubclassProc(
 {
     //AT_LOG_INFO(std::format("uMsg: {:4}, wParam: {}, lParam: {}", uMsg, wParam, lParam).c_str());
     auto vkCode = wParam;
-    bool isShiftPressed = GetAsyncKeyState(VK_SHIFT) & 0x8000;
+    const bool isShiftPressed = GetAsyncKeyState(VK_SHIFT) & 0x8000;
 
     switch (uMsg) {
     case WM_KEYDOWN:
-    case WM_SYSKEYDOWN:
+    case WM_SYSKEYDOWN: {
         // ----------------------------------------------------------------------------
         // VK_ESCAPE
         // ----------------------------------------------------------------------------
@@ -627,19 +678,21 @@ LRESULT CALLBACK ListViewSubclassProc(
         // VK_DELETE
         // ----------------------------------------------------------------------------
         else if (vkCode == VK_DELETE) {
-            //int  direction      = isShiftPressed ? -1 : 1;
+            // int  direction      = isShiftPressed ? -1 : 1;
 
             if (isShiftPressed) {
                 AT_LOG_INFO("Shift+Delete Pressed!");
                 int ind = ATWListViewGetSelectedItem();
-                if (ind == -1) return TRUE;
+                if (ind == -1)
+                    return TRUE;
                 TerminateProcessEx(g_AltTabWindows[ind].PID);
             } else {
                 AT_LOG_INFO("Delete Pressed!");
 
                 // Send the SC_CLOSE command to the window
                 int ind = ATWListViewGetSelectedItem();
-                if (ind == -1) return TRUE;
+                if (ind == -1)
+                    return TRUE;
                 AT_LOG_INFO("Ind: %d, Title: %s", ind, WStrToUTF8(g_AltTabWindows[ind].Title).c_str());
                 HWND hWnd = g_AltTabWindows[ind].hWnd;
                 PostMessage(hWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
@@ -651,18 +704,19 @@ LRESULT CALLBACK ListViewSubclassProc(
         // ----------------------------------------------------------------------------
         // Backtick
         // ----------------------------------------------------------------------------
-        else if (vkCode == VK_OEM_3) {   // 0xC0 - '`~' for US
+        else if (vkCode == VK_OEM_3) { // 0xC0 - '`~' for US
             AT_LOG_INFO("Backtick Pressed!, g_IsAltBacktick = %d", g_IsAltBacktick);
-            const int  direction    = isShiftPressed ? -1 : 1;
+            const int direction = isShiftPressed ? -1 : 1;
 
             // Move to next / previous same item based on the direction
-            const int   selectedInd = ATWListViewGetSelectedItem();
-            if (selectedInd == -1) return TRUE;
+            const int selectedInd = ATWListViewGetSelectedItem();
+            if (selectedInd == -1)
+                return TRUE;
 
-            const int   N           = (int)g_AltTabWindows.size();
+            const int N = (int)g_AltTabWindows.size();
             const auto& processName = g_AltTabWindows[selectedInd].ProcessName; // Selected process name
-            const int   pgInd       = GetProcessGroupIndex(processName);        // Index in ProcessGroupList
-            int         nextInd     = (selectedInd + N + direction) % N;        // Next index to select
+            const int pgInd = GetProcessGroupIndex(processName);                // Index in ProcessGroupList
+            int nextInd = (selectedInd + N + direction) % N;                    // Next index to select
 
             // If the AltTab window is invoked with Alt + Backtick, then we should
             // move to the next item in the list without checking the process name.
@@ -684,7 +738,8 @@ LRESULT CALLBACK ListViewSubclassProc(
                 nextInd = -1;
             }
 
-            if (nextInd != -1) ATWListViewSelectItem(nextInd);
+            if (nextInd != -1)
+                ATWListViewSelectItem(nextInd);
             return TRUE;
         }
         // ----------------------------------------------------------------------------
@@ -714,10 +769,10 @@ LRESULT CALLBACK ListViewSubclassProc(
             DestoryAltTabWindow();
             // Do NOT assign owner for this, if owner is assigned and the settings
             // dialog is not active, then it won't be displayed in alt tab windows list.
-            if (g_hSetingsWnd == nullptr) {
+            if (g_hSettingsWnd == nullptr) {
                 DialogBoxW(g_hInstance, MAKEINTRESOURCE(IDD_SETTINGS), nullptr, ATSettingsDlgProc);
             } else {
-                SetForegroundWindow(g_hSetingsWnd);
+                SetForegroundWindow(g_hSettingsWnd);
             }
             return TRUE;
         }
@@ -746,36 +801,170 @@ LRESULT CALLBACK ListViewSubclassProc(
                 update = true;
             }
             AT_LOG_INFO("Char: %#4x, SearchString: [%s]", ch, WStrToUTF8(g_SearchString).c_str());
-            update && SendMessage(g_hStaticText, WM_SETTEXT, 0, (LPARAM)(L"Search String: " + g_SearchString).c_str());
+            update&& SendMessage(g_hStaticText, WM_SETTEXT, 0, (LPARAM)(L"Search String: " + g_SearchString).c_str());
         }
-        //AT_LOG_INFO("Not handled: wParam: %0#4x, iswprint: %d", wParam, iswprint((wint_t)wParam));
-        break;
+        // AT_LOG_INFO("Not handled: wParam: %0#4x, iswprint: %d", wParam, iswprint((wint_t)wParam));
+    } break;
 
-    //case WM_NOTIFY: {
-    //    AT_LOG_INFO("WM_NOTIFY");
-    //    LPNMHDR nmhdr = reinterpret_cast<LPNMHDR>(lParam);
-    //    if (nmhdr->code == LVN_ITEMCHANGED) {
-    //        LPNMLISTVIEW pnmListView = reinterpret_cast<LPNMLISTVIEW>(nmhdr);
+    case WM_NOTIFY: {
+        AT_LOG_INFO("WM_NOTIFY");
+        //LPNMHDR nmhdr = reinterpret_cast<LPNMHDR>(lParam);
+        //if (nmhdr->code == LVN_ITEMCHANGED) {
+        //    LPNMLISTVIEW pnmListView = reinterpret_cast<LPNMLISTVIEW>(nmhdr);
 
-    //        if ((pnmListView->uChanged & LVIF_STATE) && (pnmListView->uNewState & LVIS_SELECTED)) {
-    //            // The mouse has moved over the item
-    //            // You can show a message or perform any action here
-    //            MessageBox(hListView, L"Mouse moved over item!", L"ListView Notification", MB_OK | MB_ICONINFORMATION);
-    //        }
-    //    }
-    //} break;
+        //    if ((pnmListView->uChanged & LVIF_STATE) && (pnmListView->uNewState & LVIS_SELECTED)) {
+        //        // The mouse has moved over the item
+        //        // You can show a message or perform any action here
+        //        MessageBox(hListView, L"Mouse moved over item!", L"ListView Notification", MB_OK | MB_ICONINFORMATION);
+        //    }
+        //}
+    } break;
 
-    //case WM_KILLFOCUS:
-    //    AT_LOG_INFO("WM_KILLFOCUS");
+    // ----------------------------------------------------------------------------
+    // Owner draw item
+    // ----------------------------------------------------------------------------
+    case LVM_FORWARD_DRAW: {
+        LPDRAWITEMSTRUCT lpDrawItemStruct = (LPDRAWITEMSTRUCT)lParam;
+        HDC hdc = lpDrawItemStruct->hDC;
+        RECT rcItem = lpDrawItemStruct->rcItem;
+        const int rowIndex = lpDrawItemStruct->itemID;
+        if (rowIndex < 0)
+            return FALSE;
+        //AT_LOG_INFO("LVM_FORWARD_DRAW, rowIndex: %d", rowIndex);
 
-    //    ActivateWindow(g_hAltTabWnd);
+        // Get item data
+        LVITEM lvItem = { 0 };
+        lvItem.iItem = rowIndex;
+        lvItem.mask = LVIF_TEXT | LVIF_IMAGE | LVIF_PARAM;
+        ListView_GetItem(hListView, &lvItem);
 
-    //    // Handle WM_KILLFOCUS to prevent losing selection when the window loses focus
-    //    LVITEM lvItem;
-    //    lvItem.stateMask = LVIS_FOCUSED | LVIS_SELECTED;
-    //    lvItem.state = LVIS_FOCUSED | LVIS_SELECTED;
-    //    SendMessage(hListView, LVM_SETITEMSTATE, -1, (LPARAM)&lvItem);
-    //    break;
+        const AltTabWindowData* pData = (AltTabWindowData*)lvItem.lParam;
+
+        // Get number of columns
+        HWND hHeader = ListView_GetHeader(hListView);
+        const int columns = Header_GetItemCount(hHeader);
+
+        // Get configured colors
+        COLORREF clrBk = ListView_GetBkColor(hListView);
+        COLORREF clrText = ListView_GetTextColor(hListView);
+        COLORREF clrTextBk = ListView_GetTextBkColor(hListView);
+
+        // Hot track: draw a outline rectangle for hot-tracked item instead of filling the background
+        if (lpDrawItemStruct->itemState & ODS_HOTLIGHT) {
+            HBRUSH hbr = CreateSolidBrush(RGB(100, 149, 237)); // Cornflower Blue
+            FrameRect(hdc, &rcItem, hbr);
+            DeleteObject(hbr);
+        }
+
+        // Fill background
+        if (lpDrawItemStruct->itemState & ODS_SELECTED) {
+            clrBk = GetSysColor(COLOR_HIGHLIGHT);
+            clrText = GetSysColor(COLOR_HIGHLIGHTTEXT);
+        }
+
+        // Draw gradient background
+        TRIVERTEX vertex[2];
+        vertex[0].x = rcItem.left + 1;
+        vertex[0].y = rcItem.top + 1;
+        vertex[1].x = rcItem.right - 1;
+        vertex[1].y = rcItem.bottom -1;
+        vertex[0].Red = vertex[1].Red = GetRValue(clrBk) << 8;
+        vertex[0].Green = vertex[1].Green = GetGValue(clrBk) << 8;
+        vertex[0].Blue = vertex[1].Blue = GetBValue(clrBk) << 8;
+        vertex[0].Alpha = vertex[1].Alpha = 0;
+
+        GRADIENT_RECT gRect = { 0, 1 };
+        GradientFill(hdc, vertex, 2, &gRect, 1, GRADIENT_FILL_RECT_V);
+
+        // Draw a border around the item
+        if (lpDrawItemStruct->itemState & ODS_SELECTED) {
+            HBRUSH hbr = CreateSolidBrush(RGB(150, 200, 255));
+            FrameRect(hdc, &rcItem, hbr);
+            DeleteObject(hbr);
+        }
+
+        SetBkColor(hdc, clrTextBk);
+        SetTextColor(hdc, clrText);
+
+        for (int col = 0; col < columns; ++col) {
+            RECT rcSub;
+            ListView_GetSubItemRect(hListView, rowIndex, col, LVIR_BOUNDS, &rcSub);
+            SetBkMode(hdc, TRANSPARENT);
+
+            // Draw icon (first column usually)
+            if (col == 0 && lvItem.iImage >= 0) {
+                HIMAGELIST hImgList = ListView_GetImageList(hListView, LVSIL_SMALL);
+                //ImageList_Draw(hImgList, lvItem.iImage, hdc, rcSub.left + 2, rcSub.top + 0, ILD_TRANSPARENT);
+                // Calculate rect for icon
+                int rowHeight = rcSub.bottom - rcSub.top;
+                int iconSize = 32;
+
+                int x = rcSub.left + 2;
+                int y = rcSub.top + (rowHeight - iconSize) / 2; // vertically centered
+
+                ImageList_DrawEx(hImgList, rowIndex, hdc, x, y, iconSize, iconSize, CLR_NONE, CLR_NONE, ILD_NORMAL);
+            } else if (col == 1) {
+                // Leave some margin at left
+                rcSub.left += 3;
+
+                // Draw title and subtext (if conflict process)
+                if (pData->IsConflictProcess) {
+#if 1
+                    // Temporarily show the path instead of title for the conflict processes
+                    //DrawText(hdc, pData->FullPath.c_str(), -1, &rcSub, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+                   
+                    // Just append the version to the title for conflict processes
+                    const std::wstring title = pData->Title + L" (Ver: " + pData->Version + L")";
+                    DrawText(hdc, title.c_str(), -1, &rcSub, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+#else
+                    // Normal font (default)
+                    HFONT hFontNormal = (HFONT)SendMessage(hListView, WM_GETFONT, 0, 0);
+
+                    // Title font (for main text)
+                    LOGFONT lf;
+                    GetObject(hFontNormal, sizeof(LOGFONT), &lf);
+                    lf.lfHeight = (int)(lf.lfHeight * 0.9);
+                    HFONT hFontTitle = CreateFontIndirect(&lf);
+
+                    // Small font (for subtext)
+                    GetObject(hFontNormal, sizeof(LOGFONT), &lf);
+                    lf.lfHeight = (int)(lf.lfHeight * 0.8);
+                    HFONT hFontSmall = CreateFontIndirect(&lf);
+
+                    // Draw two lines of text
+                    RECT rc1 = rcSub;
+                    rc1.bottom = rcSub.top + (rcSub.bottom - rcSub.top) * 2 / 4;
+
+                    RECT rc2 = rcSub;
+                    rc2.top = rc1.bottom;
+
+                    const std::wstring& title = pData->Title;
+                    const std::wstring& processPath = pData->FullPath;
+
+                    // Select normal font for the title line
+                    HFONT hOldFont = (HFONT)SelectObject(hdc, hFontTitle);
+                    DrawText(hdc, title.c_str(), -1, &rc1, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+
+                    // Select small font for the subtext line
+                    SelectObject(hdc, hFontSmall);
+                    DrawText(hdc, processPath.c_str(), -1, &rc2, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+
+                    // Restore original font
+                    SelectObject(hdc, hOldFont);
+                    DeleteObject(hFontSmall);
+#endif // 0
+                } else {
+                    DrawText(hdc, pData->Title.c_str(), -1, &rcSub, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+                }
+            } else {
+                // Leave some margin at left
+                rcSub.left += 3;
+
+                DrawText(hdc, pData->ProcessName.c_str(), -1, &rcSub, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+            }
+        }
+        return TRUE;
+    }
     }
 
     return DefSubclassProc(hListView, uMsg, wParam, lParam);
@@ -820,7 +1009,7 @@ INT_PTR CALLBACK AltTabWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         // Compute the window position (centered on the screen)
         int windowX = (screenWidth  - windowWidth ) / 2;
         int windowY = (screenHeight - windowHeight) / 2;
-        DWORD style = WS_VISIBLE | WS_CHILD | LVS_REPORT | LVS_SHOWSELALWAYS;
+        DWORD style = WS_VISIBLE | WS_CHILD | LVS_REPORT | LVS_SHOWSELALWAYS | LVS_OWNERDRAWFIXED;
         if (!g_Settings.ShowColHeader) {
             style |= LVS_NOCOLUMNHEADER;
         }
@@ -934,6 +1123,22 @@ INT_PTR CALLBACK AltTabWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         EnumWindows(EnumWindowsProc, (LPARAM)(&g_AltTabWindows));
         AT_LOG_INFO("g_AltTabWindows.size() : %d", g_AltTabWindows.size());
 
+        // Identify the processes which are running from different paths
+        std::unordered_map<std::wstring, std::unordered_set<std::wstring>> processMap;
+        for (const auto& item : g_AltTabWindows) {
+            const std::wstring key = item.ProcessName + item.Title;
+            processMap[key].insert(item.FullPath);
+        }
+        for (auto& item : g_AltTabWindows) {
+            const std::wstring key = item.ProcessName + item.Title;
+            if (processMap[key].size() > 1) {
+                item.IsConflictProcess = true;
+
+                // Get the file version
+                item.Version = GetFileVersion(item.FullPath);
+            }
+        }
+
         // Create ImageList and add icons
         HIMAGELIST hImageList =
             ImageList_Create(GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), ILC_COLOR32 | ILC_MASK, 0, 1);
@@ -943,6 +1148,7 @@ INT_PTR CALLBACK AltTabWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         }
 
         // Set the ImageList for the ListView
+        // Assign as the small image list (LVSIL_SMALL affects row height)
         ListView_SetImageList(hListView, hImageList, LVSIL_SMALL);
 
         // Add windows to ListView
@@ -1054,26 +1260,70 @@ INT_PTR CALLBACK AltTabWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
     break;
 
     case WM_KILLFOCUS:
-        AT_LOG_INFO("WM_KILLFOCUS");
+        AT_LOG_ERROR("WM_KILLFOCUS");
         break;
 
     case WM_NOTIFY: {
         LPNMHDR nmhdr = reinterpret_cast<LPNMHDR>(lParam);
-        if (g_Settings.ShowProcessInfoTooltip && nmhdr->code == LVN_HOTTRACK) {
+        if (nmhdr->hwndFrom == g_hListView && nmhdr->code == LVN_HOTTRACK) {
             LPNMLISTVIEW pnmListView = reinterpret_cast<LPNMLISTVIEW>(nmhdr);
 
+            // After adding LVS_OWNERDRAWFIXED to listview, we are getting -1 in iItem
+            // So, try to get the item under the cursor position using hit test.
+            if (pnmListView->iItem < 0) {
+                POINT pt;
+                GetCursorPos(&pt);
+                ScreenToClient(g_hListView, &pt);
+
+                LVHITTESTINFO ht = { 0 };
+                ht.pt = pt;
+                if (ListView_SubItemHitTest(g_hListView, &ht) != -1) {
+                    pnmListView->iItem = ht.iItem;
+                }
+            }
+
+            if (pnmListView->iItem != g_nLVHotItem) {
+                const int oldItem = g_nLVHotItem;
+                g_nLVHotItem = pnmListView->iItem;
+
+                // Invalidate only old + new row
+                if (oldItem >= 0) {
+                    RECT rc;
+                    ListView_GetItemRect(g_hListView, oldItem, &rc, LVIR_BOUNDS);
+                    InvalidateRect(g_hListView, &rc, FALSE);
+                }
+
+                if (g_nLVHotItem >= 0) {
+                    RECT rc;
+                    ListView_GetItemRect(g_hListView, g_nLVHotItem, &rc, LVIR_BOUNDS);
+                    InvalidateRect(g_hListView, &rc, FALSE);
+                }
+            }
+
             // Check if the mouse is hovering over an item
-            if (pnmListView->iItem >= 0 && (pnmListView->iItem != g_MouseHoverIndex || !g_TooltipVisible)) {
+            if (g_Settings.ShowProcessInfoTooltip && pnmListView->iItem >= 0 && (pnmListView->iItem != g_MouseHoverIndex || !g_TooltipVisible)) {
                 g_MouseHoverIndex = pnmListView->iItem;
 
                 HideCustomToolTip();
 
                 // The mouse is over an item
                 std::wstring info = std::format(
-                    L"Path: {}\nPID: {}",
+                    L"Title: {}\nPath: {}\nPID: {}",
+                    g_AltTabWindows[g_MouseHoverIndex].Title,
                     g_AltTabWindows[g_MouseHoverIndex].FullPath,
                     g_AltTabWindows[g_MouseHoverIndex].PID);
-                ShowCustomToolTip(info);
+                POINT pt;
+                GetCursorPos(&pt);
+                const int mouseX = pt.x + 36;
+
+                // Compute the row center position
+                RECT itemRect;
+                if (ListView_GetItemRect(g_hListView, g_MouseHoverIndex, &itemRect, LVIR_BOUNDS)) {
+                    pt.y = (itemRect.top + itemRect.bottom) / 2;
+                    ClientToScreen(g_hListView, &pt);
+                    pt.x = mouseX;
+                }
+                ShowCustomToolTipAt(info, pt);
             }
         } else if (nmhdr->code == NM_CLICK) {
             // Check if the single-click event is from your ListView control
@@ -1116,7 +1366,7 @@ INT_PTR CALLBACK AltTabWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
     //    if (wParam == FALSE) {
     //        // The application is becoming inactive, close the window
     //        AT_LOG_INFO("The application is becoming inactive, close the window");
-    //        DestoryAltTabWindow(false);
+    //        DestroyAltTabWindow(false);
     //    }
     //break;
 
@@ -1124,6 +1374,18 @@ INT_PTR CALLBACK AltTabWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         AT_LOG_INFO("WM_DESTROY");
         KillTimer(hWnd, TIMER_WINDOW_COUNT);
         break;
+
+    case WM_DRAWITEM: {
+        LPDRAWITEMSTRUCT lpDrawItemStruct = (LPDRAWITEMSTRUCT)lParam;
+
+        // See if the message is from our ListView control then forward to subclass
+        if (lpDrawItemStruct->CtlType == ODT_LISTVIEW) {
+            // Forward to subclass
+            SendMessage(lpDrawItemStruct->hwndItem, LVM_FORWARD_DRAW, wParam, lParam);
+            return TRUE; // handled
+        }
+    }
+    break;
 
     default:
         return DefWindowProc(hWnd, uMsg, wParam, lParam);

@@ -203,7 +203,7 @@ INT_PTR CALLBACK ATSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARA
     {
     case WM_INITDIALOG: {
         // Store the settings window handle in global variable
-        g_hSetingsWnd      = hDlg;
+        g_hSettingsWnd     = hDlg;
 
         HICON hIcon        = LoadIcon(g_hInstance, MAKEINTRESOURCE(IDI_ALTTAB));
 
@@ -266,7 +266,7 @@ INT_PTR CALLBACK ATSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARA
 
     case WM_COMMAND: {
         bool settingsModified = false;
-        if (g_hSetingsWnd) {
+        if (g_hSettingsWnd) {
             settingsModified = AreSettingsModified(hDlg);
             EnableWindow(GetDlgItem(hDlg, IDC_BUTTON_APPLY), settingsModified);
         }
@@ -355,7 +355,7 @@ INT_PTR CALLBACK ATSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARA
         DestroyIcon((HICON)SendMessage(hDlg, WM_GETICON, ICON_SMALL, 0));
         DestroyIcon((HICON)SendMessage(hDlg, WM_GETICON, ICON_BIG  , 0));
 
-        g_hSetingsWnd = nullptr;
+        g_hSettingsWnd = nullptr;
     }
     break;
 
@@ -673,6 +673,7 @@ void ATReadSettingsFromUI(HWND hDlg, AltTabSettings& settings) {
  * \param[in] settings    AltTabSettings
  */
 void ATLogSettings(const AltTabSettings& settings) {
+#ifdef _AT_LOGGER
     AT_LOG_TRACE;
     AT_LOG_DEBUG("=== AltTab Settings Begin ===");
     AT_LOG_DEBUG("[Hotkeys]");
@@ -708,6 +709,9 @@ void ATLogSettings(const AltTabSettings& settings) {
     AT_LOG_DEBUG("  ProcessExclusionsEnabled: [%s]", BOOL_TO_CSTR(settings.ProcessExclusionsEnabled));
     AT_LOG_DEBUG("  ProcessExclusions       : [%s]", WStrToUTF8(settings.ProcessExclusions).c_str());
     AT_LOG_DEBUG("=== AltTab Settings End ===");
+#else
+    UNREFERENCED_PARAMETER(settings);
+#endif // _AT_LOGGER
 }
 
 /*!

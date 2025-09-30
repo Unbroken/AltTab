@@ -68,4 +68,6 @@ void CreateCustomToolTip();
 
 void ShowCustomToolTip(const std::wstring& tooltipText, int duration = 3000);
 
+void ShowCustomToolTipAt(const std::wstring& tooltipText, const POINT& pt, int duration = 3000);
+
 void CALLBACK HideCustomToolTip(HWND hWnd = nullptr, UINT uMsg = 0, UINT_PTR idEvent = 0, DWORD dwTime = 0);

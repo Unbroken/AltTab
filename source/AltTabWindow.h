@@ -8,14 +8,19 @@
 #define CLASS_NAME   L"__AltTab_WndCls__"
 #define WINDOW_NAME  L"AltTab Window"
 
+/*!
+ * @brief Structure to hold AltTab window data
+ */
 struct AltTabWindowData {
-    HWND          hWnd;
-    HWND          hOwner;
-    HICON         hIcon;
-    std::wstring  Title;
-    std::wstring  ProcessName;
-    std::wstring  FullPath;
-    DWORD         PID;
+    HWND          hWnd;              // Window handle
+    HWND          hOwner;            // Owner window handle
+    HICON         hIcon;             // Window icon
+    std::wstring  Title;             // Window title
+    std::wstring  ProcessName;       // Process name of the window
+    std::wstring  FullPath;          // Full path of the process
+    DWORD         PID;               // Process ID
+    bool          IsConflictProcess; // Indicates if the process is running from different paths.
+    std::wstring  Version;           // File version of the process
 };
 
 /*!
