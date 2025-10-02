@@ -614,15 +614,19 @@ void DestroyAltTabWindow(bool activate) {
     }
     
     // CleanUp
-    g_hAltTabWnd           = nullptr;
-    g_IsAltTab             = false;
-    g_IsAltCtrlTab         = false;
-    g_IsAltBacktick        = false;
-    g_SelectedIndex        = -1;
+    g_hAltTabWnd             = nullptr;
+    g_IsAltTab               = false;
+    g_IsAltCtrlTab           = false;
+    g_IsAltBacktick          = false;
+    g_SelectedIndex          = -1;
+    g_nLVHotItem             = -1;
+    g_MouseHoverIndex        = -1;
+    g_IsMouseOverCloseButton = false;
+
     g_AltTabWindows.clear();
     g_SearchString .clear();
-    g_AltBacktickWndInfo   = {};
-    g_hAltTabIsBeingClosed = false;
+    g_AltBacktickWndInfo     = {};
+    g_hAltTabIsBeingClosed   = false;
 }
 
 // ----------------------------------------------------------------------------
