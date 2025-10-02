@@ -71,3 +71,5 @@ void ShowCustomToolTip(const std::wstring& tooltipText, const int duration = 300
 void ShowCustomToolTipAt(const std::wstring& tooltipText, const POINT& pt, const int duration = 3000);
 
 void CALLBACK HideCustomToolTip(HWND hWnd = nullptr, UINT uMsg = 0, UINT_PTR idEvent = 0, DWORD dwTime = 0);
+
+void RestartAltTab();

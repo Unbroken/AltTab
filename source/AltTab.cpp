@@ -264,9 +264,13 @@ int APIENTRY wWinMain(
 
     // Add the tray icon
     if (g_Settings.SystemTrayIconEnabled && !AddNotificationIcon(g_hMainWnd)) {
-        std::wstring info = L"Failed to add AltTab tray icon.";
+        const std::wstring info = L"Failed to add AltTab tray icon.";
         AT_LOG_ERROR("Failed to add AltTab tray icon.");
         ShowCustomToolTip(info, 3000);
+
+        // Try to restart the application after 3 seconds
+        Sleep(3000);
+        RestartAltTab();
     }
 
     g_KeyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, LLKeyboardProc, hInstance, NULL);
@@ -279,7 +283,7 @@ int APIENTRY wWinMain(
         thr.detach();
     } else if (g_Settings.CheckForUpdatesOpt != L"Never") {
         // Check for every 1 hour
-        UINT elapse = 3600000;
+        const UINT elapse = 3600000;
         SetTimer(g_hMainWnd, TIMER_CHECK_FOR_UPDATES, elapse, CheckForUpdatesTimerCB);
     }
 
@@ -313,6 +317,7 @@ int APIENTRY wWinMain(
  * \return 
  */
 LRESULT CALLBACK MainWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    //AT_LOG_TRACE;
     switch (message) {
     case WM_COMMAND: {
         int const wmId = LOWORD(wParam);
@@ -360,23 +365,29 @@ LRESULT CALLBACK MainWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPar
 
     } break;
 
-    case WM_USER_ALTTAB_TRAYICON:
-        switch (LOWORD(lParam)) {
-            case WM_RBUTTONUP: {
-                POINT pt;
-                GetCursorPos(&pt);
-                ShowTrayContextMenu(hWnd, pt);
-            }
-            break;
+    case WM_USER_ALTTAB_TRAYICON: {
+        const auto wmId = LOWORD(lParam);
+        //AT_LOG_INFO("WM_USER_ALTTAB_TRAYICON: wParam = %d, lParam = %d, wmId: %#06x", wParam, lParam, wmId);
+        switch (wmId) {
+        case WM_RBUTTONUP: {
+            AT_LOG_INFO("WM_USER_ALTTAB_TRAYICON: WM_RBUTTONUP");
+            POINT pt;
+            GetCursorPos(&pt);
+            ShowTrayContextMenu(hWnd, pt);
+        } break;
 
-            case WM_LBUTTONDBLCLK: {
-                // Set g_IsAltCtrlTab to true to add the windows to AltTab window, otherwise no windows will be added.
-                g_IsAltCtrlTab = true;
-                ShowAltTabWindow(g_hAltTabWnd, 0);
-            }
-            break;
+        case WM_LBUTTONUP: {
+            AT_LOG_INFO("WM_USER_ALTTAB_TRAYICON: WM_LBUTTONUP");
+            // Set g_IsAltCtrlTab to true to add the windows to AltTab window, otherwise no windows will be added.
+            g_IsAltCtrlTab = true;
+            ShowAltTabWindow(g_hAltTabWnd, 0);
+        } break;
+
+        //case WM_MOUSEMOVE: {
+        //    AT_LOG_INFO("WM_MOUSEMOVE");
+        //} break;
         }
-        break;
+    } break;
     
     case WM_DESTROY:
         AT_LOG_INFO("WM_DESTROY");
@@ -424,10 +435,11 @@ BOOL AddNotificationIcon(HWND hWndTrayIcon) {
     nid.cbSize           = sizeof(NOTIFYICONDATA);
     nid.hWnd             = hWndTrayIcon;
     nid.uID              = 1;
-    nid.uFlags           = NIF_ICON | NIF_TIP | NIF_MESSAGE;
+    nid.uFlags           = NIF_ICON | NIF_TIP | NIF_MESSAGE | NIF_SHOWTIP;
     nid.uCallbackMessage = WM_USER_ALTTAB_TRAYICON;
     nid.hIcon            = LoadIcon(g_hInstance, MAKEINTRESOURCE(IDI_ALTTAB));
-    wcscpy_s(nid.szTip, AT_PRODUCT_NAMEW);
+
+    wcscpy_s(nid.szTip, AT_PRODUCT_NAMEW L" v" AT_VERSION_TEXTW); // Tooltip text on mouse hover
 
     return Shell_NotifyIcon(NIM_ADD, &nid);
 }
@@ -877,7 +889,6 @@ void TrayContextMenuItemHandler(HWND hWnd, HMENU hSubMenu, UINT menuItemId) {
         // Had to run CheckForUpdates in a thread to display the tooltip... :-(
         std::thread thr(CheckForUpdates, false); thr.detach();
     }
-    //DialogBox(g_hInstance, MAKEINTRESOURCE(IDD_CHECK_FOR_UPDATES), nullptr, ATCheckForUpdatesDlgProc);
     break;
 
     case ID_TRAYCONTEXTMENU_RUNATSTARTUP: {
@@ -956,32 +967,7 @@ void TrayContextMenuItemHandler(HWND hWnd, HMENU hSubMenu, UINT menuItemId) {
 
     case ID_TRAYCONTEXTMENU_RESTART: {
         AT_LOG_INFO("ID_TRAYCONTEXTMENU_RESTART");
-
-        // FIXME: Still this is not working :-(
-#ifdef _DEBUG
-        // Close/detach the console window of the current process
-        // This is not needed in release build, as we are not using console window.
-        // If you want to keep the console window in debug mode, comment the below lines.
-        // If you want to keep the console window in debug mode, comment the below lines.
-        FreeConsole(); // Detach the console window from the current process
-
-        //bool result = FreeConsole();
-        //if (!result) {
-        //    AT_LOG_ERROR("Failed to free console!");
-        //}
-        // Attach to an existing console (if any)
-        //if (AttachConsole(ATTACH_PARENT_PROCESS) || AttachConsole(GetCurrentProcessId())) {
-        //    // Close the console window
-        //    FreeConsole();
-        //}
-#endif // _DEBUG
-
-        if (g_GeneralSettings.IsProcessElevated) {
-            // Relaunch AltTab with administrator privileges
-            RelaunchAsAdminAndExit(true, false);
-        } else {
-            RestartApplication();
-        }
+        RestartAltTab();
     }
     break;
 
@@ -1454,6 +1440,34 @@ void CALLBACK HideCustomToolTip(HWND /*hWnd*/, UINT /*uMsg*/, UINT_PTR /*idEvent
     KillTimer(nullptr, g_TooltipTimerId);
     SendMessage(g_hCustomToolTip, TTM_TRACKACTIVATE, false, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
     g_TooltipVisible = false;
+}
+
+void RestartAltTab() {
+    // FIXME: Still this is not working :-(
+#ifdef _DEBUG
+    // Close/detach the console window of the current process
+    // This is not needed in release build, as we are not using console window.
+    // If you want to keep the console window in debug mode, comment the below lines.
+    // If you want to keep the console window in debug mode, comment the below lines.
+    FreeConsole(); // Detach the console window from the current process
+
+    // bool result = FreeConsole();
+    // if (!result) {
+    //     AT_LOG_ERROR("Failed to free console!");
+    // }
+    //  Attach to an existing console (if any)
+    // if (AttachConsole(ATTACH_PARENT_PROCESS) || AttachConsole(GetCurrentProcessId())) {
+    //     // Close the console window
+    //     FreeConsole();
+    // }
+#endif // _DEBUG
+
+    if (g_GeneralSettings.IsProcessElevated) {
+        // Relaunch AltTab with administrator privileges
+        RelaunchAsAdminAndExit(true, false);
+    } else {
+        RestartApplication();
+    }
 }
 
 int GetCurrentYear() {

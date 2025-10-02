@@ -22,6 +22,8 @@
 #include "AltTab.h"
 #include "GlobalData.h"
 #include <unordered_map>
+#include "CheckForUpdates.h"
+#include <thread>
 
 
 HWND           g_hStaticText            = nullptr;
@@ -1650,7 +1652,8 @@ void ContextMenuItemHandler(HWND hWnd, HMENU /*hSubMenu*/, UINT menuItemId) {
         CopyToClipboard(title);
     } break;
 
-    case ID_CONTEXTMENU_ABOUTALTTAB: {
+    case ID_CONTEXTMENU_ABOUTALTTAB:
+    case ID_TRAYCONTEXTMENU_ABOUTALTTAB: {
         AT_LOG_INFO("ID_CONTEXTMENU_ABOUTALTTAB");
         DestroyAltTabWindow();
         DialogBoxW(g_hInstance, MAKEINTRESOURCE(IDD_ABOUTBOX), g_hMainWnd, ATAboutDlgProc);
@@ -1664,7 +1667,46 @@ void ContextMenuItemHandler(HWND hWnd, HMENU /*hSubMenu*/, UINT menuItemId) {
     }
     break;
 
+    case ID_TRAYCONTEXTMENU_README:
+        AT_LOG_INFO("ID_TRAYCONTEXTMENU_README");
+        ShowReadMeWindow();
+        break;
+
+    case ID_TRAYCONTEXTMENU_HELP:
+        AT_LOG_INFO("ID_TRAYCONTEXTMENU_HELP");
+        ShowHelpWindow();
+        break;
+
+    case ID_TRAYCONTEXTMENU_RELEASENOTES:
+        AT_LOG_INFO("ID_TRAYCONTEXTMENU_RELEASENOTES");
+        ShowReleaseNotesWindow();
+        break;
+
+    case ID_TRAYCONTEXTMENU_CHECKFORUPDATES: {
+        AT_LOG_INFO("ID_TRAYCONTEXTMENU_CHECKFORUPDATES");
+        DestroyAltTabWindow();
+        HideCustomToolTip();
+        ShowCustomToolTip(L"Checking for updates..., please wait.");
+
+         // Had to run CheckForUpdates in a thread to display the tooltip... :-(
+        std::thread thr(CheckForUpdates, false);
+        thr.detach(); // Let the thread run independently, otherwise tooltip won't be displayed.
+    } break;
+
+    case ID_TRAYCONTEXTMENU_RELOADALTTABSETTINGS: {
+        AT_LOG_INFO("ID_TRAYCONTEXTMENU_RELOADALTTABSETTINGS");
+        ATLoadSettings();
+        ShowCustomToolTip(L"Settings reloaded successfully.", 3000);
+    } break;
+
+    case ID_TRAYCONTEXTMENU_RESTART:
+        AT_LOG_INFO("ID_TRAYCONTEXTMENU_RESTART");
+        DestroyAltTabWindow();
+        RestartApplication();
+        break;
+
     case ID_CONTEXTMENU_EXIT:
+    case ID_TRAYCONTEXTMENU_EXIT:
         AT_LOG_INFO("ID_CONTEXTMENU_EXIT");
         PostQuitMessage(0);
         //int result = MessageBoxW(
