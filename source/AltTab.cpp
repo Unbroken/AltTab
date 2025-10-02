@@ -963,6 +963,20 @@ void TrayContextMenuItemHandler(HWND hWnd, HMENU hSubMenu, UINT menuItemId) {
         ToggleCheckState(hSubMenu, menuItemId);
     } break;
 
+    case ID_TRAYCONTEXTMENU_CLOSEALLWINDOWS: {
+        AT_LOG_INFO("ID_TRAYCONTEXTMENU_CLOSEALLWINDOWS");
+        const int result = MessageBoxW(
+            hWnd,
+            L"Are you sure you want to close all windows?",
+            AT_PRODUCT_NAMEW L": Close All Windows",
+            MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
+        if (result == IDYES) {
+            for (const auto& winInfo : g_AltTabWindows) {
+                PostMessage(winInfo.hWnd, WM_CLOSE, 0, 0);
+            }
+        }
+    } break;
+
     case ID_TRAYCONTEXTMENU_RELOADALTTABSETTINGS: {
         AT_LOG_INFO("ID_TRAYCONTEXTMENU_RELOADALTTABSETTINGS");
         ATLoadSettings();

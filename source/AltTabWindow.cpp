@@ -1389,6 +1389,14 @@ INT_PTR CALLBACK AltTabWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
     //    }
     //break;
 
+    case WM_ACTIVATE:
+        if (LOWORD(wParam) == WA_INACTIVE) {
+            AT_LOG_INFO("WM_ACTIVATE: The application is becoming inactive, close the window");
+            // The application is becoming inactive, close the window
+            DestroyAltTabWindow();
+        }
+        break;
+
     case WM_DESTROY:
         AT_LOG_INFO("WM_DESTROY");
         KillTimer(hWnd, TIMER_WINDOW_COUNT);

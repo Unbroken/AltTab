@@ -238,8 +238,6 @@
   </ItemGroup>
   <ItemGroup>
     <Image Include="source\AltTab.ico" />
-    <Image Include="source\close-window-active.png" />
-    <Image Include="source\close-window-inactive.png" />
     <Image Include="source\res\AltTab.ico" />
     <Image Include="source\res\CloseWindowActive.png" />
     <Image Include="source\res\CloseWindowInactive.png" />
