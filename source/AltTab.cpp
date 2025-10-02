@@ -12,18 +12,19 @@
 #include <shellapi.h>
 #include "Resource.h"
 #include "version.h"
-#include <WinUser.h>
-#include <process.h>
 #include <CommCtrl.h>
 #include "GlobalData.h"
 #include <filesystem>
 #include "CheckForUpdates.h"
 #include <thread>
-//#include <sysinfoapi.h>
+
+#include <combaseapi.h>
+#include <gdiplus.h>
 
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "taskschd.lib")
 #pragma comment(lib, "comsuppw.lib")
+#pragma comment(lib, "gdiplus.lib")
 
 #pragma comment(                                         \
         linker,                                          \
@@ -41,7 +42,7 @@
 HINSTANCE       g_hInstance;                                   // Current instance
 HHOOK           g_KeyboardHook;                                // Keyboard Hook
 HWND            g_hAltTabWnd           = nullptr;              // AltTab window handle
-bool            g_hAltTabIsbeingClosed = false;                // Is AltTab window being closed
+bool            g_hAltTabIsBeingClosed = false;                // Is AltTab window being closed
 HWND            g_hFGWnd               = nullptr;              // Foreground window handle
 HWND            g_hMainWnd             = nullptr;              // AltTab main window handle
 HWND            g_hSettingsWnd         = nullptr;              // AltTab settings window handle
@@ -56,7 +57,12 @@ bool            g_IsAltCtrlTab         = false;                // Is Alt+Ctrl+Ta
 bool            g_IsAltBacktick        = false;                // Is Alt+Backtick pressed
 DWORD           g_MainThreadID         = GetCurrentThreadId(); // Main thread ID
 DWORD           g_idThreadAttachTo     = 0;
+HIMAGELIST      g_hImageList           = nullptr;
+int             g_nImgCloseActiveInd   = -1;
+int             g_nImgCloseInactiveInd = -1;
+
 GeneralSettings g_GeneralSettings; // General settings
+
 
 IsHungAppWindowFunc g_pfnIsHungAppWindow = nullptr;
 
@@ -87,6 +93,66 @@ namespace {
         }
         RegCloseKey(hKey);
     }
+
+    HBITMAP LoadPngAsHBITMAP(HINSTANCE hInst, int resID, int cx, int cy) {
+        // Load PNG from resource
+        HRSRC hRes = FindResource(hInst, MAKEINTRESOURCE(resID), RT_RCDATA);
+        if (!hRes)
+            return NULL;
+        DWORD imageSize = SizeofResource(hInst, hRes);
+        HGLOBAL hMem = LoadResource(hInst, hRes);
+        if (!hMem)
+            return NULL;
+        void* pImageData = LockResource(hMem);
+
+        HGLOBAL hBuffer = GlobalAlloc(GMEM_MOVEABLE, imageSize);
+        void* pBuffer = GlobalLock(hBuffer);
+        memcpy(pBuffer, pImageData, imageSize);
+        GlobalUnlock(hBuffer);
+
+        IStream* pStream = nullptr;
+        CreateStreamOnHGlobal(hBuffer, TRUE, &pStream);
+
+        Gdiplus::Bitmap* bmp = Gdiplus::Bitmap::FromStream(pStream);
+        pStream->Release();
+
+        if (!bmp || bmp->GetLastStatus() != Gdiplus::Ok)
+            return NULL;
+
+        // Scale if needed
+        Gdiplus::Bitmap* scaled = new Gdiplus::Bitmap(cx, cy, PixelFormat32bppARGB);
+        Gdiplus::Graphics g(scaled);
+        g.DrawImage(bmp, 0, 0, cx, cy);
+        delete bmp;
+
+        HBITMAP hBmp = NULL;
+        scaled->GetHBITMAP(Gdiplus::Color(0, 0, 0, 0), &hBmp);
+        delete scaled;
+
+        return hBmp;
+    }
+
+    void InitImageList() {
+        const int imageSize = 32;
+        g_hImageList = ImageList_Create(imageSize, imageSize, ILC_COLOR32 | ILC_MASK, 1, 1);
+        if (!g_hImageList) {
+            AT_LOG_ERROR("Failed to create image list.");
+            return;
+        }
+
+        // Load images into the image list
+        HBITMAP hBmpCloseActive = LoadPngAsHBITMAP(g_hInstance, IDB_PNG_CLOSE_WINDOW_ACTIVE, imageSize, imageSize);
+        if (hBmpCloseActive) {
+            g_nImgCloseActiveInd = ImageList_Add(g_hImageList, hBmpCloseActive, nullptr);
+            DeleteObject(hBmpCloseActive);
+        }
+
+        HBITMAP hBmpCloseInactive = LoadPngAsHBITMAP(g_hInstance, IDB_PNG_CLOSE_WINDOW_INACTIVE, imageSize, imageSize);
+        if (hBmpCloseInactive) {
+            g_nImgCloseInactiveInd = ImageList_Add(g_hImageList, hBmpCloseInactive, nullptr);
+            DeleteObject(hBmpCloseInactive);
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -100,6 +166,8 @@ int APIENTRY wWinMain(
 {
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
+
+    g_hInstance = hInstance; // Store instance handle in our global variable
 
     // Set process DPI awareness
     if (!SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE)) {
@@ -133,7 +201,10 @@ int APIENTRY wWinMain(
     AT_LOG_INFO("  - Version   : %s", AT_FULL_VERSIONA);
     AT_LOG_INFO("  - ProcessID : %d", GetCurrentProcessId());
 
+    // Initialize the common things like common controls, GDI+ etc.
+    InitGDIPlus();
     InitializeCOM();
+    InitImageList();
 
     // Load GeneralSettings
     g_GeneralSettings = GetGeneralSettings();
@@ -142,8 +213,6 @@ int APIENTRY wWinMain(
         g_GeneralSettings.IsProcessElevated,
         g_GeneralSettings.IsTaskElevated,
         g_GeneralSettings.IsRunAtStartup);
-
-    g_hInstance = hInstance; // Store instance handle in our global variable
 
     CreateCustomToolTip();
 
@@ -225,6 +294,10 @@ int APIENTRY wWinMain(
     }
 
     UnhookWindowsHookEx(g_KeyboardHook);
+
+    // Un-initialize the common things like common controls, GDI+ etc.
+    UninitializeCOM();
+    ShutdownGDIPlus();
 
     return (int) msg.wParam;
 }
@@ -491,15 +564,15 @@ void ActivateWindow(HWND hTargetWnd) {
  * 
  * \param activate   Input parameter to activate the selected window or not
  */
-void DestoryAltTabWindow(bool activate) {
-    if (g_hAltTabWnd == nullptr || g_hAltTabIsbeingClosed) {
+void DestroyAltTabWindow(bool activate) {
+    if (g_hAltTabWnd == nullptr || g_hAltTabIsBeingClosed) {
         return;
     }
 
     AT_LOG_TRACE;
 
     // Set flag to true to avoid re-entry from WM_ACTIVATEAPP
-    g_hAltTabIsbeingClosed = true;
+    g_hAltTabIsBeingClosed = true;
 
     // Hide custom tooltip
     HideCustomToolTip();
@@ -537,7 +610,7 @@ void DestoryAltTabWindow(bool activate) {
     g_AltTabWindows.clear();
     g_SearchString .clear();
     g_AltBacktickWndInfo   = {};
-    g_hAltTabIsbeingClosed = false;
+    g_hAltTabIsBeingClosed = false;
 }
 
 // ----------------------------------------------------------------------------
@@ -684,7 +757,7 @@ LRESULT CALLBACK LLKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 
                 if (vkCode == VK_ESCAPE) {
                     AT_LOG_INFO("Escape Pressed!");
-                    DestoryAltTabWindow();
+                    DestroyAltTabWindow();
                     return TRUE;
                 }
 
@@ -752,7 +825,7 @@ void CALLBACK CheckAltKeyIsReleased(HWND /*hWnd*/, UINT /*uMsg*/, UINT_PTR /*idE
     if (g_hAltTabWnd && !isAltPressed) {
         // Alt key released, destroy your window
         AT_LOG_INFO("--------- Alt key released! ---------");
-        DestoryAltTabWindow(true);
+        DestroyAltTabWindow(true);
     }
 }
 
@@ -1338,7 +1411,7 @@ DWORD WINAPI ShowCustomToolTipThread(LPVOID pvParam) {
     return 0;
 }
 
-void ShowCustomToolTip(const std::wstring& tooltipText, int duration /*= 3000*/) {
+void ShowCustomToolTip(const std::wstring& tooltipText, const int duration /*= 3000*/) {
     AT_LOG_TRACE;
 #if 0
     // TODO: Still this is not working properly so going with alternative
@@ -1363,7 +1436,7 @@ void ShowCustomToolTip(const std::wstring& tooltipText, int duration /*= 3000*/)
 #endif // 0
 }
 
-void ShowCustomToolTipAt(const std::wstring& tooltipText, const POINT& pt, int duration /*= 3000*/) {
+void ShowCustomToolTipAt(const std::wstring& tooltipText, const POINT& pt, const int duration /*= 3000*/) {
     AT_LOG_TRACE;
     if (!g_TooltipVisible) {
         g_ToolInfo.lpszText = (LPWSTR)(LPCWSTR)tooltipText.c_str();

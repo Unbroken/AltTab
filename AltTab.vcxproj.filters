@@ -36,6 +36,9 @@
     <ClCompile Include="source\CheckForUpdates.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="source\GlobalData.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include=".clang-format" />
@@ -46,6 +49,7 @@
     <None Include="log4cpp-config.properties">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include="source\AltTabWindowTestApp.vcxproj" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="source\AltTab.h">
@@ -90,6 +94,12 @@
   </ItemGroup>
   <ItemGroup>
     <Image Include="source\AltTab.ico">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="source\close-window-active.png">
+      <Filter>Resource Files</Filter>
+    </Image>
+    <Image Include="source\close-window-inactive.png">
       <Filter>Resource Files</Filter>
     </Image>
   </ItemGroup>

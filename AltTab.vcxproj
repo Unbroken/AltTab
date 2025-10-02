@@ -206,6 +206,7 @@
     <ClCompile Include="source\AltTabWindow.cpp" />
     <ClCompile Include="source\CheckForUpdates.cpp" />
     <ClCompile Include="source\fuzzywuzzy.cpp" />
+    <ClCompile Include="source\GlobalData.cpp" />
     <ClCompile Include="source\Logger.cpp" />
     <ClCompile Include="source\Utils.cpp" />
   </ItemGroup>
@@ -237,6 +238,8 @@
   </ItemGroup>
   <ItemGroup>
     <Image Include="source\AltTab.ico" />
+    <Image Include="source\close-window-active.png" />
+    <Image Include="source\close-window-inactive.png" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="source\AltTab.rc" />
