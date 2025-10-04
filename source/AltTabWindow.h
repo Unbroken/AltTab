@@ -8,14 +8,22 @@
 #define CLASS_NAME   L"__AltTab_WndCls__"
 #define WINDOW_NAME  L"AltTab Window"
 
+/*!
+ * @brief Structure to hold AltTab window data
+ */
 struct AltTabWindowData {
-    HWND          hWnd;
-    HWND          hOwner;
-    HICON         hIcon;
-    std::wstring  Title;
-    std::wstring  ProcessName;
-    std::wstring  FullPath;
-    DWORD         PID;
+    HWND          hWnd;                  // Window handle
+    HWND          hOwner;                // Owner window handle
+    HICON         hIcon;                 // Window icon
+    std::wstring  Title;                 // Window title
+    std::wstring  ProcessName;           // Process name of the window
+    std::wstring  FullPath;              // Full path of the process
+    std::wstring  Description;           // File description of the process
+    std::wstring  CompanyName;           // Company name of the process
+    DWORD         PID;                   // Process ID
+    bool          IsConflictProcess;     // Indicates if the process is running from different paths.
+    std::wstring  Version;               // File version of the process
+    bool          IsBeingClosed;         // Indicates if the window is being closed
 };
 
 /*!
@@ -69,3 +77,5 @@ void SetAltTabActiveWindow();
  * \return Return true if the given uCode is a printable character otherwise false.
  */
 bool ATMapVirtualKey(UINT uCode, wchar_t& ch);
+
+std::vector<AltTabWindowData> GetAltTabWindows();

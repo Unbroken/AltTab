@@ -12,18 +12,19 @@
 #include <shellapi.h>
 #include "Resource.h"
 #include "version.h"
-#include <WinUser.h>
-#include <process.h>
 #include <CommCtrl.h>
 #include "GlobalData.h"
 #include <filesystem>
 #include "CheckForUpdates.h"
 #include <thread>
-//#include <sysinfoapi.h>
+
+#include <combaseapi.h>
+#include <gdiplus.h>
 
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "taskschd.lib")
 #pragma comment(lib, "comsuppw.lib")
+#pragma comment(lib, "gdiplus.lib")
 
 #pragma comment(                                         \
         linker,                                          \
@@ -41,10 +42,10 @@
 HINSTANCE       g_hInstance;                                   // Current instance
 HHOOK           g_KeyboardHook;                                // Keyboard Hook
 HWND            g_hAltTabWnd           = nullptr;              // AltTab window handle
-bool            g_hAltTabIsbeingClosed = false;                // Is AltTab window being closed
+bool            g_hAltTabIsBeingClosed = false;                // Is AltTab window being closed
 HWND            g_hFGWnd               = nullptr;              // Foreground window handle
 HWND            g_hMainWnd             = nullptr;              // AltTab main window handle
-HWND            g_hSetingsWnd          = nullptr;              // AltTab settings window handle
+HWND            g_hSettingsWnd         = nullptr;              // AltTab settings window handle
 HWND            g_hCustomToolTip       = nullptr;              // Custom tool tip
 UINT_PTR        g_TooltipTimerId;
 bool            g_TooltipVisible       = false;                // Is tooltip visible or not
@@ -56,7 +57,13 @@ bool            g_IsAltCtrlTab         = false;                // Is Alt+Ctrl+Ta
 bool            g_IsAltBacktick        = false;                // Is Alt+Backtick pressed
 DWORD           g_MainThreadID         = GetCurrentThreadId(); // Main thread ID
 DWORD           g_idThreadAttachTo     = 0;
+HIMAGELIST      g_hImageList           = nullptr;
+HIMAGELIST      g_hLVImageList         = nullptr;
+int             g_nImgCloseActiveInd   = -1;
+int             g_nImgCloseInactiveInd = -1;
+
 GeneralSettings g_GeneralSettings; // General settings
+
 
 IsHungAppWindowFunc g_pfnIsHungAppWindow = nullptr;
 
@@ -87,6 +94,66 @@ namespace {
         }
         RegCloseKey(hKey);
     }
+
+    HBITMAP LoadPngAsHBITMAP(HINSTANCE hInst, int resID, int cx, int cy) {
+        // Load PNG from resource
+        HRSRC hRes = FindResource(hInst, MAKEINTRESOURCE(resID), RT_RCDATA);
+        if (!hRes)
+            return NULL;
+        DWORD imageSize = SizeofResource(hInst, hRes);
+        HGLOBAL hMem = LoadResource(hInst, hRes);
+        if (!hMem)
+            return NULL;
+        void* pImageData = LockResource(hMem);
+
+        HGLOBAL hBuffer = GlobalAlloc(GMEM_MOVEABLE, imageSize);
+        void* pBuffer = GlobalLock(hBuffer);
+        memcpy(pBuffer, pImageData, imageSize);
+        GlobalUnlock(hBuffer);
+
+        IStream* pStream = nullptr;
+        CreateStreamOnHGlobal(hBuffer, TRUE, &pStream);
+
+        Gdiplus::Bitmap* bmp = Gdiplus::Bitmap::FromStream(pStream);
+        pStream->Release();
+
+        if (!bmp || bmp->GetLastStatus() != Gdiplus::Ok)
+            return NULL;
+
+        // Scale if needed
+        Gdiplus::Bitmap* scaled = new Gdiplus::Bitmap(cx, cy, PixelFormat32bppARGB);
+        Gdiplus::Graphics g(scaled);
+        g.DrawImage(bmp, 0, 0, cx, cy);
+        delete bmp;
+
+        HBITMAP hBmp = NULL;
+        scaled->GetHBITMAP(Gdiplus::Color(0, 0, 0, 0), &hBmp);
+        delete scaled;
+
+        return hBmp;
+    }
+
+    void InitImageList() {
+        const int imageSize = 32;
+        g_hImageList = ImageList_Create(imageSize, imageSize, ILC_COLOR32 | ILC_MASK, 1, 1);
+        if (!g_hImageList) {
+            AT_LOG_ERROR("Failed to create image list.");
+            return;
+        }
+
+        // Load images into the image list
+        HBITMAP hBmpCloseActive = LoadPngAsHBITMAP(g_hInstance, IDB_PNG_CLOSE_WINDOW_ACTIVE, imageSize, imageSize);
+        if (hBmpCloseActive) {
+            g_nImgCloseActiveInd = ImageList_Add(g_hImageList, hBmpCloseActive, nullptr);
+            DeleteObject(hBmpCloseActive);
+        }
+
+        HBITMAP hBmpCloseInactive = LoadPngAsHBITMAP(g_hInstance, IDB_PNG_CLOSE_WINDOW_INACTIVE, imageSize, imageSize);
+        if (hBmpCloseInactive) {
+            g_nImgCloseInactiveInd = ImageList_Add(g_hImageList, hBmpCloseInactive, nullptr);
+            DeleteObject(hBmpCloseInactive);
+        }
+    }
 }
 
 // ----------------------------------------------------------------------------
@@ -100,6 +167,8 @@ int APIENTRY wWinMain(
 {
     UNREFERENCED_PARAMETER(hPrevInstance);
     UNREFERENCED_PARAMETER(lpCmdLine);
+
+    g_hInstance = hInstance; // Store instance handle in our global variable
 
     // Set process DPI awareness
     if (!SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE)) {
@@ -133,7 +202,10 @@ int APIENTRY wWinMain(
     AT_LOG_INFO("  - Version   : %s", AT_FULL_VERSIONA);
     AT_LOG_INFO("  - ProcessID : %d", GetCurrentProcessId());
 
+    // Initialize the common things like common controls, GDI+ etc.
+    InitGDIPlus();
     InitializeCOM();
+    InitImageList();
 
     // Load GeneralSettings
     g_GeneralSettings = GetGeneralSettings();
@@ -142,8 +214,6 @@ int APIENTRY wWinMain(
         g_GeneralSettings.IsProcessElevated,
         g_GeneralSettings.IsTaskElevated,
         g_GeneralSettings.IsRunAtStartup);
-
-    g_hInstance = hInstance; // Store instance handle in our global variable
 
     CreateCustomToolTip();
 
@@ -195,9 +265,13 @@ int APIENTRY wWinMain(
 
     // Add the tray icon
     if (g_Settings.SystemTrayIconEnabled && !AddNotificationIcon(g_hMainWnd)) {
-        std::wstring info = L"Failed to add AltTab tray icon.";
+        const std::wstring info = L"Failed to add AltTab tray icon.";
         AT_LOG_ERROR("Failed to add AltTab tray icon.");
         ShowCustomToolTip(info, 3000);
+
+        // Try to restart the application after 3 seconds
+        Sleep(3000);
+        RestartAltTab();
     }
 
     g_KeyboardHook = SetWindowsHookEx(WH_KEYBOARD_LL, LLKeyboardProc, hInstance, NULL);
@@ -210,7 +284,7 @@ int APIENTRY wWinMain(
         thr.detach();
     } else if (g_Settings.CheckForUpdatesOpt != L"Never") {
         // Check for every 1 hour
-        UINT elapse = 3600000;
+        const UINT elapse = 3600000;
         SetTimer(g_hMainWnd, TIMER_CHECK_FOR_UPDATES, elapse, CheckForUpdatesTimerCB);
     }
 
@@ -226,6 +300,10 @@ int APIENTRY wWinMain(
 
     UnhookWindowsHookEx(g_KeyboardHook);
 
+    // Un-initialize the common things like common controls, GDI+ etc.
+    UninitializeCOM();
+    ShutdownGDIPlus();
+
     return (int) msg.wParam;
 }
 
@@ -240,6 +318,7 @@ int APIENTRY wWinMain(
  * \return 
  */
 LRESULT CALLBACK MainWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam) {
+    //AT_LOG_TRACE;
     switch (message) {
     case WM_COMMAND: {
         int const wmId = LOWORD(wParam);
@@ -287,23 +366,29 @@ LRESULT CALLBACK MainWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lPar
 
     } break;
 
-    case WM_USER_ALTTAB_TRAYICON:
-        switch (LOWORD(lParam)) {
-            case WM_RBUTTONUP: {
-                POINT pt;
-                GetCursorPos(&pt);
-                ShowTrayContextMenu(hWnd, pt);
-            }
-            break;
+    case WM_USER_ALTTAB_TRAYICON: {
+        const auto wmId = LOWORD(lParam);
+        //AT_LOG_INFO("WM_USER_ALTTAB_TRAYICON: wParam = %d, lParam = %d, wmId: %#06x", wParam, lParam, wmId);
+        switch (wmId) {
+        case WM_RBUTTONUP: {
+            AT_LOG_INFO("WM_USER_ALTTAB_TRAYICON: WM_RBUTTONUP");
+            POINT pt;
+            GetCursorPos(&pt);
+            ShowTrayContextMenu(hWnd, pt);
+        } break;
 
-            case WM_LBUTTONDBLCLK: {
-                // Set g_IsAltCtrlTab to true to add the windows to AltTab window, otherwise no windows will be added.
-                g_IsAltCtrlTab = true;
-                ShowAltTabWindow(g_hAltTabWnd, 0);
-            }
-            break;
+        case WM_LBUTTONUP: {
+            AT_LOG_INFO("WM_USER_ALTTAB_TRAYICON: WM_LBUTTONUP");
+            // Set g_IsAltCtrlTab to true to add the windows to AltTab window, otherwise no windows will be added.
+            g_IsAltCtrlTab = true;
+            ShowAltTabWindow(g_hAltTabWnd, 0);
+        } break;
+
+        //case WM_MOUSEMOVE: {
+        //    AT_LOG_INFO("WM_MOUSEMOVE");
+        //} break;
         }
-        break;
+    } break;
     
     case WM_DESTROY:
         AT_LOG_INFO("WM_DESTROY");
@@ -351,10 +436,11 @@ BOOL AddNotificationIcon(HWND hWndTrayIcon) {
     nid.cbSize           = sizeof(NOTIFYICONDATA);
     nid.hWnd             = hWndTrayIcon;
     nid.uID              = 1;
-    nid.uFlags           = NIF_ICON | NIF_TIP | NIF_MESSAGE;
+    nid.uFlags           = NIF_ICON | NIF_TIP | NIF_MESSAGE | NIF_SHOWTIP;
     nid.uCallbackMessage = WM_USER_ALTTAB_TRAYICON;
     nid.hIcon            = LoadIcon(g_hInstance, MAKEINTRESOURCE(IDI_ALTTAB));
-    wcscpy_s(nid.szTip, AT_PRODUCT_NAMEW);
+
+    wcscpy_s(nid.szTip, AT_PRODUCT_NAMEW L" v" AT_VERSION_TEXTW); // Tooltip text on mouse hover
 
     return Shell_NotifyIcon(NIM_ADD, &nid);
 }
@@ -368,8 +454,8 @@ INT_PTR CALLBACK ATAboutDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
     {
     case WM_INITDIALOG: {
         HICON hIcon = LoadIcon(g_hInstance, MAKEINTRESOURCE(IDI_ALTTAB));
-        SendMessage(hDlg, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
-        SendMessage(hDlg, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
+        SendMessageW(hDlg, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+        SendMessageW(hDlg, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
 
         // Center the dialog on the screen
         int screenWidth  = GetSystemMetrics(SM_CXSCREEN);
@@ -418,8 +504,8 @@ INT_PTR CALLBACK ATAboutDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
         break;
 
     case WM_DESTROY:
-        DestroyIcon((HICON)SendMessage(hDlg, WM_GETICON, ICON_SMALL, 0));
-        DestroyIcon((HICON)SendMessage(hDlg, WM_GETICON, ICON_BIG, 0));
+        DestroyIcon((HICON)SendMessageW(hDlg, WM_GETICON, ICON_SMALL, 0));
+        DestroyIcon((HICON)SendMessageW(hDlg, WM_GETICON, ICON_BIG, 0));
         break;
     }
     return (INT_PTR)FALSE;
@@ -491,15 +577,15 @@ void ActivateWindow(HWND hTargetWnd) {
  * 
  * \param activate   Input parameter to activate the selected window or not
  */
-void DestoryAltTabWindow(bool activate) {
-    if (g_hAltTabWnd == nullptr || g_hAltTabIsbeingClosed) {
+void DestroyAltTabWindow(const bool activate) {
+    if (g_hAltTabWnd == nullptr || g_hAltTabIsBeingClosed) {
         return;
     }
 
-    AT_LOG_TRACE;
+    AT_LOG_INFO("DestroyAltTabWindow: activate = %d", activate);
 
     // Set flag to true to avoid re-entry from WM_ACTIVATEAPP
-    g_hAltTabIsbeingClosed = true;
+    g_hAltTabIsBeingClosed = true;
 
     // Hide custom tooltip
     HideCustomToolTip();
@@ -529,15 +615,19 @@ void DestoryAltTabWindow(bool activate) {
     }
     
     // CleanUp
-    g_hAltTabWnd           = nullptr;
-    g_IsAltTab             = false;
-    g_IsAltCtrlTab         = false;
-    g_IsAltBacktick        = false;
-    g_SelectedIndex        = -1;
+    g_hAltTabWnd             = nullptr;
+    g_IsAltTab               = false;
+    g_IsAltCtrlTab           = false;
+    g_IsAltBacktick          = false;
+    g_SelectedIndex          = -1;
+    g_nLVHotItem             = -1;
+    g_MouseHoverIndex        = -1;
+    g_IsMouseOverCloseButton = false;
+
     g_AltTabWindows.clear();
     g_SearchString .clear();
-    g_AltBacktickWndInfo   = {};
-    g_hAltTabIsbeingClosed = false;
+    g_AltBacktickWndInfo     = {};
+    g_hAltTabIsBeingClosed   = false;
 }
 
 // ----------------------------------------------------------------------------
@@ -684,7 +774,7 @@ LRESULT CALLBACK LLKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                 
                 if (vkCode == VK_ESCAPE) {
                     AT_LOG_INFO("Escape Pressed!");
-                    DestoryAltTabWindow();
+                    DestroyAltTabWindow();
                     return TRUE;
                 }
 
@@ -752,7 +842,7 @@ void CALLBACK CheckAltKeyIsReleased(HWND /*hWnd*/, UINT /*uMsg*/, UINT_PTR /*idE
     if (g_hAltTabWnd && !isAltPressed) {
         // Alt key released, destroy your window
         AT_LOG_INFO("--------- Alt key released! ---------");
-        DestoryAltTabWindow(true);
+        DestroyAltTabWindow(true);
     }
 }
 
@@ -804,7 +894,6 @@ void TrayContextMenuItemHandler(HWND hWnd, HMENU hSubMenu, UINT menuItemId) {
         // Had to run CheckForUpdates in a thread to display the tooltip... :-(
         std::thread thr(CheckForUpdates, false); thr.detach();
     }
-    //DialogBox(g_hInstance, MAKEINTRESOURCE(IDD_CHECK_FOR_UPDATES), nullptr, ATCheckForUpdatesDlgProc);
     break;
 
     case ID_TRAYCONTEXTMENU_RUNATSTARTUP: {
@@ -875,6 +964,43 @@ void TrayContextMenuItemHandler(HWND hWnd, HMENU hSubMenu, UINT menuItemId) {
         ToggleCheckState(hSubMenu, menuItemId);
     } break;
 
+    case ID_TRAYCONTEXTMENU_CLOSEALLWINDOWS: {
+        // Get AltTab windows
+        std::vector<AltTabWindowData> altTabWindows = GetAltTabWindows();
+        AT_LOG_INFO("ID_TRAYCONTEXTMENU_CLOSEALLWINDOWS: altTabWindows.size(): %zu", altTabWindows.size());
+        if (altTabWindows.empty()) {
+            ShowCustomToolTip(L"No windows to close.", 3000);
+            return;
+        }
+
+        const int result = MessageBoxW(
+            hWnd,
+            L"Are you sure you want to close all windows?",
+            AT_PRODUCT_NAMEW L": Close All Windows",
+            MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
+
+        if (result == IDYES) {
+            for (const auto& winInfo : altTabWindows) {
+#ifdef _DEBUG
+                // Ignore Visual Studio IDEs in debug mode
+                if (EqualsIgnoreCase(winInfo.ProcessName, L"devenv.exe")
+                    || EqualsIgnoreCase(winInfo.ProcessName, L"AltTab.exe")) {
+                    AT_LOG_INFO(
+                        "Ignoring: ProcessName: [%-15ls], Title:[%ls] ...",
+                        winInfo.ProcessName.c_str(),
+                        winInfo.Title.c_str());
+                    continue;
+                }
+#endif // _DEBUG
+                AT_LOG_INFO(
+                    "Closing : ProcessName: [%-15ls], Title:[%ls] ...",
+                    winInfo.ProcessName.c_str(),
+                    winInfo.Title.c_str());
+                PostMessage(winInfo.hWnd, WM_CLOSE, 0, 0);
+            }
+        }
+    } break;
+
     case ID_TRAYCONTEXTMENU_RELOADALTTABSETTINGS: {
         AT_LOG_INFO("ID_TRAYCONTEXTMENU_RELOADALTTABSETTINGS");
         ATLoadSettings();
@@ -883,32 +1009,7 @@ void TrayContextMenuItemHandler(HWND hWnd, HMENU hSubMenu, UINT menuItemId) {
 
     case ID_TRAYCONTEXTMENU_RESTART: {
         AT_LOG_INFO("ID_TRAYCONTEXTMENU_RESTART");
-
-        // FIXME: Still this is not working :-(
-#ifdef _DEBUG
-        // Close/detach the console window of the current process
-        // This is not needed in release build, as we are not using console window.
-        // If you want to keep the console window in debug mode, comment the below lines.
-        // If you want to keep the console window in debug mode, comment the below lines.
-        FreeConsole(); // Detach the console window from the current process
-
-        //bool result = FreeConsole();
-        //if (!result) {
-        //    AT_LOG_ERROR("Failed to free console!");
-        //}
-        // Attach to an existing console (if any)
-        //if (AttachConsole(ATTACH_PARENT_PROCESS) || AttachConsole(GetCurrentProcessId())) {
-        //    // Close the console window
-        //    FreeConsole();
-        //}
-#endif // _DEBUG
-
-        if (g_GeneralSettings.IsProcessElevated) {
-            // Relaunch AltTab with administrator privileges
-            RelaunchAsAdminAndExit(true, false);
-        } else {
-            RestartApplication();
-        }
+        RestartAltTab();
     }
     break;
 
@@ -1177,7 +1278,7 @@ BOOL CALLBACK EnumWindowsProcNAT(HWND hwnd, LPARAM lParam) {
     char className[256] = { 0 };
     GetClassNameA(hwnd, className, sizeof(className));
 
-    if (strcmp(className, "TaskSwitcherWnd") == 0 || strcmp(className, "MultitaskingViewFrame") == 0) {
+    if (EqualsIgnoreCase(className, "TaskSwitcherWnd") || EqualsIgnoreCase(className, "MultitaskingViewFrame")) {
         *reinterpret_cast<bool*>(lParam) = true;
         return FALSE; // Stop enumerating
     }
@@ -1189,9 +1290,7 @@ bool IsNativeATWDisplayed() {
     HWND hWnd = GetForegroundWindow();
     char className[256] = { 0 };
     GetClassNameA(hWnd, className, 256);
-    return
-       strcmp(className, "TaskSwitcherWnd") == 0 ||
-       strcmp(className, "MultitaskingViewFrame") == 0;
+    return EqualsIgnoreCase(className, "TaskSwitcherWnd") || EqualsIgnoreCase(className, "MultitaskingViewFrame");
 }
 
 BOOL IsHungAppWindowEx(HWND hwnd) {
@@ -1252,11 +1351,11 @@ std::wstring GetAppDirPath() {
 
 void LogLastErrorInfo() {
     // Get the last error code
-    DWORD errorCode = GetLastError();
+    const DWORD errorCode = GetLastError();
 
     // Get the error message
     LPVOID errorMessage;
-    FormatMessage(
+    FormatMessageW(
         FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
         nullptr,
         errorCode,
@@ -1308,12 +1407,12 @@ void CreateCustomToolTip() {
     g_ToolInfo.rect.bottom = 0;
 
 	 // Send an add tool message to the tooltip control window
-    SendMessage(g_hCustomToolTip, TTM_ADDTOOL, 0, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
+    SendMessageW(g_hCustomToolTip, TTM_ADDTOOL, 0, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
 
     // Enable multiple lines
-    SendMessage(g_hCustomToolTip, TTM_SETMAXTIPWIDTH, 0, MAXINT);
+    SendMessageW(g_hCustomToolTip, TTM_SETMAXTIPWIDTH, 0, MAXINT);
 
-    SendMessage(g_hCustomToolTip, TTM_SETTIPBKCOLOR, RGB(255, 255, 0), 0);
+    SendMessageW(g_hCustomToolTip, TTM_SETTIPBKCOLOR, RGB(255, 255, 0), 0);
 }
 
 DWORD WINAPI ShowCustomToolTipThread(LPVOID pvParam) {
@@ -1328,9 +1427,9 @@ DWORD WINAPI ShowCustomToolTipThread(LPVOID pvParam) {
     int duration        = tti->Duration;
     g_ToolInfo.lpszText = (LPWSTR)tti->ToolTipText.c_str();
 
-    SendMessage(g_hCustomToolTip, TTM_SETTOOLINFO  ,    0, (LPARAM)&g_ToolInfo);
-    SendMessage(g_hCustomToolTip, TTM_TRACKPOSITION,    0, (LPARAM)(DWORD)MAKELONG(pt.x + 12, pt.y + 12));
-    SendMessage(g_hCustomToolTip, TTM_TRACKACTIVATE, true, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
+    SendMessageW(g_hCustomToolTip, TTM_SETTOOLINFO  ,    0, (LPARAM)&g_ToolInfo);
+    SendMessageW(g_hCustomToolTip, TTM_TRACKPOSITION,    0, (LPARAM)(DWORD)MAKELONG(pt.x + 0, pt.y + 0));
+    SendMessageW(g_hCustomToolTip, TTM_TRACKACTIVATE, true, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
     if (duration != -1) {
         AT_LOG_INFO("Start TIMER_CUSTOM_TOOLTIP timer");
         g_TooltipTimerId = SetTimer(nullptr, TIMER_CUSTOM_TOOLTIP, duration, HideCustomToolTip);
@@ -1338,7 +1437,7 @@ DWORD WINAPI ShowCustomToolTipThread(LPVOID pvParam) {
     return 0;
 }
 
-void ShowCustomToolTip(const std::wstring& tooltipText, int duration /*= 3000*/) {
+void ShowCustomToolTip(const std::wstring& tooltipText, const int duration /*= 3000*/) {
     AT_LOG_TRACE;
 #if 0
     // TODO: Still this is not working properly so going with alternative
@@ -1352,33 +1451,64 @@ void ShowCustomToolTip(const std::wstring& tooltipText, int duration /*= 3000*/)
        POINT pt;
        GetCursorPos(&pt);
 
+       // Slight offset to avoid covering the mouse pointer
        g_ToolInfo.lpszText = (LPWSTR)(LPCWSTR)tooltipText.c_str();
-       SendMessage(g_hCustomToolTip, TTM_SETTOOLINFO,      0, (LPARAM)&g_ToolInfo);
-       SendMessage(g_hCustomToolTip, TTM_TRACKPOSITION,    0, (LPARAM)(DWORD)MAKELONG(pt.x + 12, pt.y + 12));
-       SendMessage(g_hCustomToolTip, TTM_TRACKACTIVATE, true, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
+       SendMessageW(g_hCustomToolTip, TTM_SETTOOLINFO,      0, (LPARAM)&g_ToolInfo);
+       SendMessageW(g_hCustomToolTip, TTM_TRACKPOSITION,    0, (LPARAM)(DWORD)MAKELONG(pt.x + 12, pt.y + 12));
+       SendMessageW(g_hCustomToolTip, TTM_TRACKACTIVATE, true, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
    
        g_TooltipTimerId = SetTimer(nullptr, TIMER_CUSTOM_TOOLTIP, duration, HideCustomToolTip);
        g_TooltipVisible = true;
     }
-
-    //// Get mouse coordinates
-    //POINT pt;
-    //GetCursorPos(&pt);
-
-    //g_ToolInfo.lpszText = (LPWSTR)(LPCWSTR)tooltipText.c_str();
-    //SendMessage(g_hCustomToolTip, TTM_SETTOOLINFO,      0, (LPARAM)&g_ToolInfo);
-    //SendMessage(g_hCustomToolTip, TTM_TRACKPOSITION,    0, (LPARAM)(DWORD)MAKELONG(pt.x + 12, pt.y + 12));
-    //SendMessage(g_hCustomToolTip, TTM_TRACKACTIVATE, true, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
-   
-    //g_TooltipTimerId = SetTimer(nullptr, TIMER_CUSTOM_TOOLTIP, duration, HideCustomToolTip);
 #endif // 0
+}
+
+void ShowCustomToolTipAt(const std::wstring& tooltipText, const POINT& pt, const int duration /*= 3000*/) {
+    AT_LOG_TRACE;
+    if (!g_TooltipVisible) {
+        g_ToolInfo.lpszText = (LPWSTR)(LPCWSTR)tooltipText.c_str();
+        SendMessageW(g_hCustomToolTip, TTM_SETTOOLINFO  ,    0, (LPARAM)&g_ToolInfo);
+        SendMessageW(g_hCustomToolTip, TTM_TRACKPOSITION,    0, (LPARAM)(DWORD)MAKELONG(pt.x, pt.y));
+        SendMessageW(g_hCustomToolTip, TTM_TRACKACTIVATE, true, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
+
+        g_TooltipTimerId = SetTimer(nullptr, TIMER_CUSTOM_TOOLTIP, duration, HideCustomToolTip);
+        g_TooltipVisible = true;
+    }
 }
 
 void CALLBACK HideCustomToolTip(HWND /*hWnd*/, UINT /*uMsg*/, UINT_PTR /*idEvent*/, DWORD /*dwTime*/) {
     AT_LOG_TRACE;
     KillTimer(nullptr, g_TooltipTimerId);
-    SendMessage(g_hCustomToolTip, TTM_TRACKACTIVATE, false, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
+    SendMessageW(g_hCustomToolTip, TTM_TRACKACTIVATE, false, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
     g_TooltipVisible = false;
+}
+
+void RestartAltTab() {
+    // FIXME: Still this is not working :-(
+#ifdef _DEBUG
+    // Close/detach the console window of the current process
+    // This is not needed in release build, as we are not using console window.
+    // If you want to keep the console window in debug mode, comment the below lines.
+    // If you want to keep the console window in debug mode, comment the below lines.
+    FreeConsole(); // Detach the console window from the current process
+
+    // bool result = FreeConsole();
+    // if (!result) {
+    //     AT_LOG_ERROR("Failed to free console!");
+    // }
+    //  Attach to an existing console (if any)
+    // if (AttachConsole(ATTACH_PARENT_PROCESS) || AttachConsole(GetCurrentProcessId())) {
+    //     // Close the console window
+    //     FreeConsole();
+    // }
+#endif // _DEBUG
+
+    if (g_GeneralSettings.IsProcessElevated) {
+        // Relaunch AltTab with administrator privileges
+        RelaunchAsAdminAndExit(true, false);
+    } else {
+        RestartApplication();
+    }
 }
 
 int GetCurrentYear() {

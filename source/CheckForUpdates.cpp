@@ -65,7 +65,7 @@ std::wstring GetLastErrorEx() {
 }
 
 // Function to check for updates from a URL using Windows API
-void CheckForUpdates(bool quiteMode) {
+void CheckForUpdates(const bool quiteMode) {
     AT_LOG_TRACE;
     // Initialize WinINet
     HINTERNET hInternet = InternetOpen(L"Sample WinINet", INTERNET_OPEN_TYPE_DIRECT, nullptr, nullptr, 0);
@@ -81,7 +81,7 @@ void CheckForUpdates(bool quiteMode) {
         AT_LOG_ERROR("Error opening URL with WinINet");
         if (!quiteMode) {
             std::wstring info = std::format(L"Failed to download file [{}], please check again.", AT_UPDATE_FILE_URL);
-            MessageBox(nullptr, info.c_str(), AT_PRODUCT_NAMEW, MB_OK | MB_ICONERROR);
+            MessageBoxW(nullptr, info.c_str(), AT_PRODUCT_NAMEW, MB_OK | MB_ICONERROR | MB_TOPMOST);
         }
         GetLastErrorEx();
         InternetCloseHandle(hInternet);
@@ -125,8 +125,8 @@ void CheckForUpdates(bool quiteMode) {
     if (!IsValidVersion(updateVersion)) {
         AT_LOG_ERROR("Invalid update version: %s, please check again!", updateVersion.c_str());
         if (!quiteMode) {
-            std::string info = std::format("Invalid update version: {}", updateVersion);
-            MessageBoxA(nullptr, info.c_str(), AT_PRODUCT_NAMEA, MB_OK | MB_ICONERROR);
+            const std::string info = std::format("Invalid update version: {}", updateVersion);
+            MessageBoxA(nullptr, info.c_str(), AT_PRODUCT_NAMEA, MB_OK | MB_ICONERROR | MB_TOPMOST);
         }
         return;
     }
@@ -140,14 +140,16 @@ void CheckForUpdates(bool quiteMode) {
         DialogBoxW(g_hInstance, MAKEINTRESOURCE(IDD_CHECK_FOR_UPDATES), nullptr, ATCheckForUpdatesDlgProc);
     } else {
         const std::string info = std::format(
-            "You are using the latest version of {}.\n\t- CurrentVersion:\t{}\n\t- UpdateVersion:\t{}",
+            "You are using the latest version of {}.\n"
+            "    - CurrentVersion: {}\n"
+            "    - UpdateVersion: {}",
             AT_PRODUCT_NAMEA,
             currentVersion,
             updateVersion);
         if (quiteMode) {
             AT_LOG_INFO(info.c_str());
         } else {
-            MessageBoxA(nullptr, info.c_str(), AT_PRODUCT_NAMEA, MB_OK | MB_ICONINFORMATION);
+            MessageBoxA(nullptr, info.c_str(), AT_PRODUCT_NAMEA, MB_OK | MB_ICONINFORMATION | MB_TOPMOST);
         }
     }
 }
@@ -158,8 +160,8 @@ INT_PTR CALLBACK ATCheckForUpdatesDlgProc(HWND hDlg, UINT message, WPARAM wParam
     {
     case WM_INITDIALOG: {
         HICON hIcon = LoadIcon(g_hInstance, MAKEINTRESOURCE(IDI_ALTTAB));
-        SendMessage(hDlg, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
-        SendMessage(hDlg, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
+        SendMessageW(hDlg, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+        SendMessageW(hDlg, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
 
         // Center the dialog on the screen
         int screenWidth  = GetSystemMetrics(SM_CXSCREEN);
@@ -182,12 +184,12 @@ INT_PTR CALLBACK ATCheckForUpdatesDlgProc(HWND hDlg, UINT message, WPARAM wParam
                                   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                   DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Lucida Console");
  
-        SendMessage(GetDlgItem(hDlg, IDC_EDIT_CFU_CHANGES          ), WM_SETFONT, (WPARAM)hFont, TRUE);
-        SendMessage(GetDlgItem(hDlg, IDC_STATIC_CFU_CURRENT_VERSION), WM_SETFONT, (WPARAM)hFont, TRUE);
-        SendMessage(GetDlgItem(hDlg, IDC_STATIC_CFU_UPDATE_VERSION ), WM_SETFONT, (WPARAM)hFont, TRUE);
-        SendMessage(GetDlgItem(hDlg, IDC_STATIC_1                  ), WM_SETFONT, (WPARAM)hFont, TRUE);
-        SendMessage(GetDlgItem(hDlg, IDC_STATIC_2                  ), WM_SETFONT, (WPARAM)hFont, TRUE);
-        SendMessage(GetDlgItem(hDlg, IDC_STATIC_3                  ), WM_SETFONT, (WPARAM)hFont, TRUE);
+        SendMessageW(GetDlgItem(hDlg, IDC_EDIT_CFU_CHANGES          ), WM_SETFONT, (WPARAM)hFont, TRUE);
+        SendMessageW(GetDlgItem(hDlg, IDC_STATIC_CFU_CURRENT_VERSION), WM_SETFONT, (WPARAM)hFont, TRUE);
+        SendMessageW(GetDlgItem(hDlg, IDC_STATIC_CFU_UPDATE_VERSION ), WM_SETFONT, (WPARAM)hFont, TRUE);
+        SendMessageW(GetDlgItem(hDlg, IDC_STATIC_1                  ), WM_SETFONT, (WPARAM)hFont, TRUE);
+        SendMessageW(GetDlgItem(hDlg, IDC_STATIC_2                  ), WM_SETFONT, (WPARAM)hFont, TRUE);
+        SendMessageW(GetDlgItem(hDlg, IDC_STATIC_3                  ), WM_SETFONT, (WPARAM)hFont, TRUE);
 
         SetDlgItemTextA(hDlg, IDC_STATIC_CFU_CURRENT_VERSION, g_UpdatesInfo.CurrentVersion.c_str());
         SetDlgItemTextA(hDlg, IDC_STATIC_CFU_UPDATE_VERSION , g_UpdatesInfo.UpdateVersion.c_str());
@@ -213,12 +215,12 @@ INT_PTR CALLBACK ATCheckForUpdatesDlgProc(HWND hDlg, UINT message, WPARAM wParam
     case WM_DESTROY:
         //  Clean up
         HWND hEditBox = GetDlgItem(hDlg, IDC_EDIT_SIMILAR_PROCESS_GROUPS);
-        HFONT hFont = (HFONT)SendMessage(hEditBox, WM_GETFONT, 0, 0);
+        HFONT hFont = (HFONT)SendMessageW(hEditBox, WM_GETFONT, 0, 0);
         if (hFont) {
             DeleteObject(hFont);
         }
-        DestroyIcon((HICON)SendMessage(hDlg, WM_GETICON, ICON_SMALL, 0));
-        DestroyIcon((HICON)SendMessage(hDlg, WM_GETICON, ICON_BIG, 0));
+        DestroyIcon((HICON)SendMessageW(hDlg, WM_GETICON, ICON_SMALL, 0));
+        DestroyIcon((HICON)SendMessageW(hDlg, WM_GETICON, ICON_BIG, 0));
         break;
     }
     return (INT_PTR)FALSE;

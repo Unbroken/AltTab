@@ -66,3 +66,7 @@ bool CheckSingleInstance(const std::wstring& mutexName);
 bool InitializeCOM();
 
 void UninitializeCOM();
+
+void InitGDIPlus();
+
+void ShutdownGDIPlus();

@@ -1,5 +1,9 @@
 #pragma once
+#include "framework.h"
 #include <CommCtrl.h>
+#include <memory>
+#include <vector>
+#include "log4cpp/CategoryStream.hh"
 
 // ----------------------------------------------------------------------------
 // Global declarations
@@ -19,15 +23,16 @@
 
 struct AltTabSettings;
 struct AltTabWindowData;
-typedef BOOL(WINAPI* IsHungAppWindowFunc)(HWND);
+using IsHungAppWindowFunc = BOOL(WINAPI*)(HWND);
 
 extern HINSTANCE                            g_hInstance;
 extern HWND                                 g_hMainWnd;              // AltTab main window handle
-extern HWND                                 g_hSetingsWnd;           // AltTab settings window handle
+extern HWND                                 g_hSettingsWnd;          // AltTab settings window handle
 extern HWND                                 g_hAltTabWnd;            // AltTab window handle
 extern HWND                                 g_hFGWnd;                // Foreground window handle
 extern HWND                                 g_hStaticText;
 extern HWND                                 g_hListView;
+extern int                                  g_nLVHotItem;
 extern HWND                                 g_hToolTip;
 extern HWND                                 g_hCustomTooltip;
 extern TOOLINFO                             g_ToolInfo;
@@ -50,3 +55,17 @@ extern int                                  g_SelectedIndex;
 extern int                                  g_MouseHoverIndex;
 extern DWORD                                g_MainThreadID;
 extern std::wstring                         g_SearchString;
+extern HIMAGELIST                           g_hImageList;
+extern HIMAGELIST                           g_hLVImageList;
+extern int                                  g_nImgCloseActiveInd;
+extern int                                  g_nImgCloseInactiveInd;
+extern RECT                                 g_rcBtnClose;
+extern bool                                 g_IsMouseOverCloseButton;
+extern int                                  g_nIconSize;
+
+// Colors
+extern COLORREF g_crSSBackground;
+extern COLORREF g_crSSText;
+
+extern COLORREF g_crLVBackground;
+extern COLORREF g_crLVText;

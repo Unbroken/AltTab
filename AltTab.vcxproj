@@ -157,7 +157,7 @@
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(SolutionDir)libraries\log4cpp\lib\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>log4cpp.lib;Dwmapi.lib;Shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>log4cpp.lib;Dwmapi.lib;Shell32.lib;Version.lib;Msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -177,7 +177,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(SolutionDir)libraries\log4cpp\lib\$(Configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>log4cpp.lib;Dwmapi.lib;Shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>log4cpp.lib;Dwmapi.lib;Shell32.lib;Version.lib;Msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseNoLogger|x64'">
@@ -197,7 +197,7 @@
       <OptimizeReferences>true</OptimizeReferences>
       <GenerateDebugInformation>false</GenerateDebugInformation>
       <AdditionalLibraryDirectories>$(SolutionDir)libraries\log4cpp\lib\Release;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
-      <AdditionalDependencies>log4cpp.lib;Dwmapi.lib;Shell32.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>log4cpp.lib;Dwmapi.lib;Shell32.lib;Version.lib;Msimg32.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -206,6 +206,7 @@
     <ClCompile Include="source\AltTabWindow.cpp" />
     <ClCompile Include="source\CheckForUpdates.cpp" />
     <ClCompile Include="source\fuzzywuzzy.cpp" />
+    <ClCompile Include="source\GlobalData.cpp" />
     <ClCompile Include="source\Logger.cpp" />
     <ClCompile Include="source\Utils.cpp" />
   </ItemGroup>
@@ -237,6 +238,9 @@
   </ItemGroup>
   <ItemGroup>
     <Image Include="source\AltTab.ico" />
+    <Image Include="source\res\AltTab.ico" />
+    <Image Include="source\res\CloseWindowActive.png" />
+    <Image Include="source\res\CloseWindowInactive.png" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="source\AltTab.rc" />

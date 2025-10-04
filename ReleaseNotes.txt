@@ -11,9 +11,27 @@ Known Issues
 ------------
 - Available @ https://sourceforge.net/p/alttab/tickets/
 
+2025.2.0.0 new features and bug fixes
+-------------------------------------
++ List view enhancements:
+  > Displayed the selected item with gradient background color with frame 
+    rectangle around it.
+  > Displayed the hot track item with just frame rectangle around it.
+  > Removed the dotted rectangle around the selected/focused item.
++ Show the close button on the right side of the item in the list view when the
+  mouse is hovered on the item with inactive icon. When the mouse is hovered on
+  the close button, it is shown with active icon. Clicking on the close button
+  closes the selected process window.
+  > Item will be displayed with red color when the process is being closed.
++ Added "Copy Title" and some tray menu items in context menu.
++ Show title, process info (path, description, company name & ID) in tooltip on
+  mouse hover on item in the list view.
+
+
 2025.1.0.0 new features and bug fixes
 -------------------------------------
 + Implemented 'Run as Administrator' and added in tray context menu.
+
 
 2024.4.0.2 new features and bug fixes
 -------------------------------------
