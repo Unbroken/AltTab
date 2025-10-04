@@ -24,6 +24,7 @@
 #include <unordered_map>
 #include "CheckForUpdates.h"
 #include <thread>
+#include <windowsx.h>
 
 
 HWND           g_hStaticText            = nullptr;
@@ -52,9 +53,23 @@ static BOOL      TerminateProcessEx    (DWORD pid);
 static void      ATCloseWindow         (const int index);
 static bool      IsExcludedProcess     (const std::wstring& processName);
 
-std::vector<AltTabWindowData> g_AltTabWindows;
+// Window procedure functions for individual messages
+static void    ATW_OnActivate        (HWND hwnd, UINT state, HWND hwndActDeact, BOOL fMinimized);
+static void    ATW_OnClose           (HWND hwnd);
+static void    ATW_OnCommand         (HWND hwnd, int id, HWND hwndCtl, UINT codeNotify);
+static void    ATW_OnContextMenu     (HWND hwnd, HWND hwndContext, UINT xPos, UINT yPos);
+static BOOL    ATW_OnCreate          (HWND hWnd, LPCREATESTRUCT lpCreateStruct);
+static LRESULT ATW_OnCtlColorStatic  (HWND hWnd, HDC hDC, HWND hCtl, UINT type);
+static void    ATW_OnDestroy         (HWND hwnd);
+static void    ATW_OnDrawItem        (HWND hwnd, const DRAWITEMSTRUCT* lpDrawItem);
+static void    ATW_OnKeyDown         (HWND hwnd, UINT vk, BOOL fDown, int cRepeat, UINT flags);
+static void    ATW_OnKillFocus       (HWND hwnd, HWND hwndNewFocus);
+static void    ATW_OnLButtonDown     (HWND hwnd, BOOL fDoubleClick, int x, int y, UINT keyFlags);
+static BOOL    ATW_OnNotify          (HWND hwnd, int idFrom, NMHDR* pnmhdr);
+static void    ATW_OnSysCommand      (HWND hwnd, UINT cmd, int x, int y);
+static void    ATW_OnTimer           (HWND hwnd, UINT id);
 
-#define LVM_FORWARD_DRAW (WM_USER + 200)
+std::vector<AltTabWindowData> g_AltTabWindows;
 
 namespace AT {
     // Get the file version
@@ -128,7 +143,6 @@ namespace AT {
 
         if (rowIndex < 0)
             return FALSE;
-        // AT_LOG_INFO("LVM_FORWARD_DRAW, rowIndex: %d", rowIndex);
 
         // Get item data
         LVITEM lvItem = { 0 };
@@ -958,7 +972,7 @@ LRESULT CALLBACK ListViewSubclassProc(
     // ----------------------------------------------------------------------------
     // Owner draw item
     // ----------------------------------------------------------------------------
-    case LVM_FORWARD_DRAW: {
+    case WM_DRAWITEM: {
         LPDRAWITEMSTRUCT lpDrawItemStruct = (LPDRAWITEMSTRUCT)lParam;
         return AT::ATListViewDrawItem(hListView, lpDrawItemStruct);
     }
@@ -992,459 +1006,24 @@ INT_PTR CALLBACK AltTabWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
     //AT_LOG_INFO(std::format("uMsg: {:4}, wParam: {}, lParam: {}", uMsg, wParam, lParam).c_str());
 
     switch (uMsg) {
-    case WM_CREATE: {
-        g_hAltTabWnd = hWnd;
-
-        // Get screen width and height
-        int screenWidth  = GetSystemMetrics(SM_CXSCREEN);
-        int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-
-        // Compute the window size (e.g., 80% of the screen width and height)
-        int windowWidth  = static_cast<int>(screenWidth  * g_Settings.WidthPercentage  * 0.01);
-        int windowHeight = static_cast<int>(screenHeight * g_Settings.HeightPercentage * 0.01);
-
-        // Compute the window position (centered on the screen)
-        int windowX = (screenWidth  - windowWidth ) / 2;
-        int windowY = (screenHeight - windowHeight) / 2;
-        DWORD style = WS_VISIBLE | WS_CHILD | LVS_REPORT | LVS_SHOWSELALWAYS | LVS_OWNERDRAWFIXED;
-        if (!g_Settings.ShowColHeader) {
-            style |= LVS_NOCOLUMNHEADER;
-        }
-
-        // Create Static control for the search string
-        int staticTextHeight = 24;
-
-        // Calculate the required height for the static control based on font size
-        HDC hdc = GetDC(hWnd);
-
-        g_hSSFont = CreateFontEx(hdc, g_Settings.SSFontName, g_Settings.SSFontSize, g_Settings.SSFontStyle);
-        g_hLVFont = CreateFontEx(hdc, g_Settings.LVFontName, g_Settings.LVFontSize, g_Settings.LVFontStyle);
-
-        SelectObject(hdc, g_hSSFont);
-
-        TEXTMETRIC tm;
-        GetTextMetrics(hdc, &tm);
-        staticTextHeight = (int)(tm.tmHeight + tm.tmExternalLeading + 1);
-
-        // Get the DPI of the window/screen
-        int dpi = GetDeviceCaps(hdc, LOGPIXELSX);
-
-        ReleaseDC(hWnd, hdc);
-
-        // While creating static search string control, use 0 for height and
-        // use -1 for the rest of the calculations while adjusting window size.
-        if (!g_Settings.ShowSearchString) {
-            staticTextHeight = 0;
-        }
-
-        int X      = 0;
-        int Y      = 0;
-        int width  = windowWidth;
-        int height = staticTextHeight;
-
-        //AT_LOG_INFO("StaticTextControl: X: %d, Y: %d, width: %d, height: %d", X, Y, width, height);
-
-        // Create a static text control
-        HWND hStaticText = CreateWindowW(
-            L"Static",                          // Static text control class
-            L"Search String: empty",            // Text content
-            WS_CHILD | WS_VISIBLE | SS_CENTER,  // Styles
-            X,                                  // X
-            Y,                                  // Y
-            width,                              // Width
-            height,                             // Height
-            hWnd,                               // Parent window
-            (HMENU)nullptr,                     // Menu or control ID (set to NULL for static text)
-            g_hInstance,                        // Instance handle
-            nullptr                             // No window creation data
-        );
-
-        SendMessageW(hStaticText, WM_SETFONT, (WPARAM)g_hSSFont, 0);
-        g_hStaticText = hStaticText;
-
-        // Here adding 1 pixel to the Y position to avoid the static text control overlap with the ListView control
-        if (g_Settings.ShowSearchString) {
-            Y += staticTextHeight + 1;
-        } else {
-            staticTextHeight = -1;
-        }
-
-        // Here, reducing the window width by 1 (-1) to fit the scrollbar properly in the window.
-        // height is reduced by 3 (-3)
-        //  1 pixel for the static text control and listView control overlap
-        //  2 pixels for the upper and bottom border in listview control
-        width  = windowWidth - 1; 
-        height = windowHeight - staticTextHeight - 3;
-        
-        //AT_LOG_INFO("ListViewControl: X: %d, Y: %d, width: %d, height: %d", X, Y, width, height);
-
-        // Create ListView control
-        HWND hListView = CreateWindowExW(
-            0,                                     // Optional window styles
-            WC_LISTVIEW,                           // Predefined class
-            L"",                                   // No window title
-            style,                                 // Styles
-            X,                                     // X
-            Y,                                     // Y
-            width,                                 // Width
-            height,                                // Height
-            hWnd,                                  // Parent window
-            (HMENU)IDC_LISTVIEW,                   // Control identifier
-            g_hInstance,                           // Instance handle
-            nullptr                                // No window creation data
-        );
-
-        SendMessageW(hListView, WM_SETFONT, (WPARAM)g_hLVFont, MAKELPARAM(TRUE, 0));
-        g_hListView = hListView;
-
-        // Subclass the ListView control
-        SetWindowSubclass(hListView, ListViewSubclassProc, 1, 0);
-
-        int wndWidth  = (int)(screenWidth  * g_Settings.WidthPercentage  * 0.01);
-        int wndHeight = (int)(screenHeight * g_Settings.HeightPercentage * 0.01);
-
-        g_Settings.WindowWidth  = wndWidth;
-        g_Settings.WindowHeight = wndHeight;
-
-        // Add header / columns
-        CustomizeListView(hListView, dpi);
-
-        // Set ListView background and font colors
-        SetListViewCustomColors(hListView, g_Settings.LVBackgroundColor, g_Settings.LVFontColor);
-
-        // Set window transparency
-        SetWindowLong(hWnd, GWL_EXSTYLE, GetWindowLong(hWnd, GWL_EXSTYLE) | WS_EX_LAYERED);
-        SetLayeredWindowAttributes(hWnd, RGB(255, 255, 255), (BYTE)g_Settings.Transparency, LWA_ALPHA);
-
-        //std::vector<AltTabWindowData> altTabWindows;
-        EnumWindows(EnumWindowsProc, (LPARAM)(&g_AltTabWindows));
-        AT_LOG_INFO("g_AltTabWindows.size() : %d", g_AltTabWindows.size());
-
-        // Identify the processes which are running from different paths
-        std::unordered_map<std::wstring, std::unordered_set<std::wstring>> processMap;
-        for (const auto& item : g_AltTabWindows) {
-            const std::wstring key = item.ProcessName + item.Title;
-            processMap[key].insert(item.FullPath);
-        }
-        for (auto& item : g_AltTabWindows) {
-            const std::wstring key = item.ProcessName + item.Title;
-            if (processMap[key].size() > 1) {
-                item.IsConflictProcess = true;
-            }
-        }
-
-        // Create ImageList and add icons
-        const int imageWidth = GetSystemMetrics(SM_CXICON);
-        const int imageHeight = GetSystemMetrics(SM_CYICON);
-
-        // Create ImageList and add icons, assign a dummy ImageList to set the row height
-        // The row height is determined by the height of the icons in the ImageList assigned as LVSIL_SMALL
-        // But the icons in the ImageList are drawn using the ImageList g_hLVImageList.
-        HIMAGELIST hImageListDummy = ImageList_Create(imageWidth, imageHeight + 1, ILC_COLOR32 | ILC_MASK, 0, 1);
-        HIMAGELIST hImageList = ImageList_Create(imageWidth, imageHeight, ILC_COLOR32 | ILC_MASK, 0, 1);
-
-        for (const auto& item : g_AltTabWindows) {
-            ImageList_AddIcon(hImageList, item.hIcon);
-        }
-
-        // Set the ImageList for the ListView
-        // Assign as the small image list (LVSIL_SMALL affects row height)
-        ListView_SetImageList(hListView, hImageListDummy, LVSIL_SMALL);
-        g_hLVImageList = hImageList;
-
-        // Add windows to ListView
-        for (int i = 0; i < g_AltTabWindows.size(); ++i) {
-            AddListViewItem(hListView, i, g_AltTabWindows[i]);
-        }
-
-        // Compute the required height and resize the ListView
-        // Get the header control associated with the ListView
-        HWND hHeader = ListView_GetHeader(g_hListView);
-        int headerHeight = 0;
-        if (hHeader) {
-            RECT rcHeader;
-            GetClientRect(hHeader, &rcHeader);
-            headerHeight = rcHeader.bottom - rcHeader.top;
-        }
-        RECT rcListView;
-        GetClientRect(g_hListView, &rcListView);
-        int itemHeight     = ListView_GetItemRect(g_hListView, 0, &rcListView, LVIR_BOUNDS) ? rcListView.bottom - rcListView.top : 0;
-        int itemCount      = ListView_GetItemCount(g_hListView);
-        int requiredHeight = itemHeight * itemCount + headerHeight + staticTextHeight + 3;
-
-        if (requiredHeight <= g_Settings.WindowHeight) {
-            SetWindowPos(hWnd, HWND_TOPMOST, windowX, windowY, windowWidth, requiredHeight, SWP_NOZORDER);
-            WindowResizeAndPosition(hWnd, wndWidth, requiredHeight);
-        } else {
-            int scrollBarWidth   = GetSystemMetrics(SM_CXVSCROLL);
-            int processNameWidth = GetColProcessNameWidth();
-            int colTitleWidth    = g_Settings.WindowWidth - (COL_ICON_WIDTH + processNameWidth) - scrollBarWidth - 1;
-            int lvHeight         = (g_Settings.WindowHeight - itemHeight + 1) / itemHeight * itemHeight;
-            requiredHeight       = lvHeight + headerHeight + staticTextHeight + 3;
-
-            ListView_SetColumnWidth(hListView, 1, colTitleWidth);
-
-            // Here, reducing the window width by 1 (-1) to fit the scrollbar properly in the window.
-            SetWindowPos(hListView, nullptr, 0, 0, windowWidth - 1, lvHeight, SWP_NOMOVE | SWP_NOZORDER);
-            SetWindowPos(hWnd, HWND_TOPMOST, windowX, windowY, windowWidth, requiredHeight, SWP_NOZORDER);
-            WindowResizeAndPosition(hWnd, wndWidth, requiredHeight);
-        }
-
-        SetForegroundWindow(hWnd);
-        SetFocus(hListView);
-
-        // Select the first row
-        LVITEM lvItem;
-        lvItem.stateMask = LVIS_FOCUSED | LVIS_SELECTED;
-        lvItem.state     = LVIS_FOCUSED | LVIS_SELECTED;
-        SendMessageW(hListView, LVM_SETITEMSTATE, 0, (LPARAM)&lvItem);
-
-        // Create a timer to refresh the ListView when there is a change in windows
-        SetTimer(hWnd, TIMER_WINDOW_COUNT, TIMER_WINDOW_COUNT_ELAPSE, nullptr);
-    }
-    break;
-
-    case WM_CTLCOLORSTATIC: {
-        HDC hdcStatic   = (HDC)wParam;
-
-        // Set the text color and background color of the static text control
-        SetTextColor(hdcStatic, g_Settings.SSFontColor      );
-        SetBkColor  (hdcStatic, g_Settings.SSBackgroundColor);
-
-        return (INT_PTR)CreateSolidBrush(g_Settings.SSBackgroundColor);
-    }
-    break;
-
-    case WM_COMMAND:
-        if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL) {
-            PostQuitMessage(0);
-            return (INT_PTR)TRUE;
-        }
-        break;
-
-    case WM_CONTEXTMENU: {
-        AT_LOG_INFO("WM_CONTEXTMENU");
-        POINT pt;
-        GetCursorPos(&pt);
-        ShowContextMenu(hWnd, pt);
-    }
-    break;
-
-    case WM_SYSCOMMAND:
-        AT_LOG_INFO("WM_SYSCOMMAND");
-        // Handle Alt+Space (system menu)
-        if (wParam == SC_KEYMENU && (lParam & 0xFFFF) == VK_APPS) {
-            // Alt+Space pressed, handle it here
-            POINT cursorPos;
-            GetCursorPos(&cursorPos);
-            TrackPopupMenu(GetSystemMenu(hWnd, FALSE), 0, cursorPos.x, cursorPos.y, 0, hWnd, NULL);
-            return 0;
-        }
-        break;
-
-    case WM_CLOSE:
-        AT_LOG_INFO("WM_CLOSE");
-        // Release the font
-        if (g_hLVFont != nullptr) { DeleteObject(g_hLVFont); }
-        if (g_hSSFont != nullptr) { DeleteObject(g_hSSFont); }
-        PostQuitMessage(0);
-        return TRUE;
-
-    case WM_KEYDOWN: {
-        if (wParam == VK_ESCAPE) {
-            AT_LOG_INFO("WM_KEYDOWN: VK_ESCAPE");
-            // Close the window when Escape key is pressed
-            DestroyAltTabWindow();
-            return TRUE;
-        }
-    }
-    break;
-
-    case WM_KILLFOCUS:
-        AT_LOG_ERROR("WM_KILLFOCUS");
-        break;
-
-    case WM_NOTIFY: {
-        LPNMHDR nmhdr = reinterpret_cast<LPNMHDR>(lParam);
-        if (nmhdr->hwndFrom == g_hListView && nmhdr->code == LVN_HOTTRACK) {
-            LPNMLISTVIEW pnmListView = reinterpret_cast<LPNMLISTVIEW>(nmhdr);
-
-            // After adding LVS_OWNERDRAWFIXED to listview, we are getting -1 in iItem
-            // So, try to get the item under the cursor position using hit test.
-            POINT pt;
-            GetCursorPos(&pt);
-
-            const POINT ptScreenPos = pt;
-
-            ScreenToClient(g_hListView, &pt);
-            const POINT ptClientPos = pt;
-
-            if (pnmListView->iItem < 0) {
-                LVHITTESTINFO ht = { 0 };
-                ht.pt = ptClientPos;
-                if (ListView_SubItemHitTest(g_hListView, &ht) != -1) {
-                    pnmListView->iItem = ht.iItem;
-                }
-            }
-            // Check if the mouse is over on close button area then change the button image to active
-            if (g_rcBtnClose.left <= ptClientPos.x && ptClientPos.x <= g_rcBtnClose.right &&
-                g_rcBtnClose.top  <= ptClientPos.y && ptClientPos.y <= g_rcBtnClose.bottom) {
-                if (!g_IsMouseOverCloseButton) {
-                    g_IsMouseOverCloseButton = true;
-                    // Invalidate the button area to redraw
-                    InvalidateRect(g_hListView, &g_rcBtnClose, FALSE);
-                }
-            } else {
-                if (g_IsMouseOverCloseButton) {
-                    g_IsMouseOverCloseButton = false;
-                    // Invalidate the button area to redraw
-                    InvalidateRect(g_hListView, &g_rcBtnClose, FALSE);
-                }
-            }
-
-            if (pnmListView->iItem != g_nLVHotItem) {
-                const int oldItem = g_nLVHotItem;
-                g_nLVHotItem = pnmListView->iItem;
-
-                // Invalidate only old + new row
-                if (oldItem >= 0) {
-                    RECT rc;
-                    ListView_GetItemRect(g_hListView, oldItem, &rc, LVIR_BOUNDS);
-                    InvalidateRect(g_hListView, &rc, FALSE);
-                }
-
-                if (g_nLVHotItem >= 0) {
-                    RECT rc;
-                    ListView_GetItemRect(g_hListView, g_nLVHotItem, &rc, LVIR_BOUNDS);
-                    InvalidateRect(g_hListView, &rc, FALSE);
-                }
-            }
-
-            // Check if the mouse is hovering over an item
-            if (g_Settings.ShowProcessInfoTooltip && pnmListView->iItem >= 0 && (pnmListView->iItem != g_MouseHoverIndex || !g_TooltipVisible)) {
-                g_MouseHoverIndex = pnmListView->iItem;
-
-                HideCustomToolTip();
-
-                // The mouse is over an item
-                const std::wstring tooltip = std::format(
-                    L"Title: {}\nPath: {}\nDescription: {} {}\nCompanyName: {}\nPID: {}",
-                    g_AltTabWindows[g_MouseHoverIndex].Title,
-                    g_AltTabWindows[g_MouseHoverIndex].FullPath,
-                    g_AltTabWindows[g_MouseHoverIndex].Description,
-                    g_AltTabWindows[g_MouseHoverIndex].Version,
-                    g_AltTabWindows[g_MouseHoverIndex].CompanyName,
-                    g_AltTabWindows[g_MouseHoverIndex].PID);
-
-                // Show the tooltip just below the item
-                RECT itemRect;
-                if (ListView_GetItemRect(g_hListView, g_MouseHoverIndex, &itemRect, LVIR_BOUNDS)) {
-                    pt.x = ptClientPos.x;
-                    pt.y = itemRect.bottom + 1;
-                    ClientToScreen(g_hListView, &pt);
-                    pt.x = ptScreenPos.x + 36;
-                    ShowCustomToolTipAt(tooltip, pt, -1);
-                }
-            }
-            return TRUE;
-        }
-        
-        if (nmhdr->code == NM_CLICK) {
-            // Check if the single-click event is from your ListView control
-            if (((LPNMHDR)lParam)->hwndFrom == g_hListView) {
-                // First check if the mouse is over on close button area
-                if (g_IsMouseOverCloseButton) {
-                    // Close the window of the item under mouse cursor
-                    if (g_nLVHotItem != -1) {
-                        ATCloseWindow(g_nLVHotItem);
-                    }
-                } else {
-                    DestroyAltTabWindow(true);
-                }
-                return TRUE;
-            }
-        }
-    } break;
-
-    case WM_MOUSEHOVER:
-        AT_LOG_INFO("WM_MOUSEHOVER");
-        break;
-
-    //case WM_MOUSELEAVE:
-    //    AT_LOG_INFO("WM_MOUSELEAVE");
-    //    HideCustomToolTip();
-    //    break;
-
-    case WM_LBUTTONDOWN: {
-        AT_LOG_INFO("WM_LBUTTONDOWN");
-    } break;
-
-    case WM_TIMER: {
-        //AT_LOG_INFO("WM_TIMER");
-        std::vector<AltTabWindowData> altTabWindows;
-        EnumWindows(EnumWindowsProc, (LPARAM)(&altTabWindows));
-        //AT_LOG_INFO("altTabWindows.size(): %d, g_AltTabWindows.size(): %d", altTabWindows.size(), g_AltTabWindows.size());
-        bool doRefresh = altTabWindows.size() != g_AltTabWindows.size();
-        if (!doRefresh && altTabWindows.size() == g_AltTabWindows.size()) {
-            // Deep compare the two vectors and update only if there is a change
-            for (int i = 0; i < altTabWindows.size(); ++i) {
-                const auto& a = altTabWindows[i];
-                const auto& b = g_AltTabWindows[i];
-                if (a.hWnd != b.hWnd || a.hOwner != b.hOwner || a.PID != b.PID || a.Title != b.Title
-                    || a.ProcessName != b.ProcessName) {
-                    doRefresh = true;
-                    break;
-                }
-            }
-        }
-        if (doRefresh) {
-            RefreshAltTabWindow();
-        }
-    }
-    break;
-
-    // NOTE:
-    // Since the application is getting WM_KILLFOCUS frequently, this is causing the AltTab to close.
-    // So, I think it's better to close the AltTab window when the user clicks outside the window.
-    //case WM_ACTIVATEAPP:
-    //    // Check if the application is becoming inactive
-    //    if (wParam == FALSE) {
-    //        // The application is becoming inactive, close the window
-    //        AT_LOG_INFO("The application is becoming inactive, close the window");
-    //        DestroyAltTabWindow(false);
-    //    }
-    //break;
-
-    case WM_ACTIVATE:
-        if (LOWORD(wParam) == WA_INACTIVE) {
-            AT_LOG_INFO("WM_ACTIVATE: The application is becoming inactive, close the window");
-            // The application is becoming inactive, close the window
-            DestroyAltTabWindow();
-        }
-        break;
-
-    case WM_DESTROY:
-        AT_LOG_INFO("WM_DESTROY");
-        KillTimer(hWnd, TIMER_WINDOW_COUNT);
-        break;
-
-    case WM_DRAWITEM: {
-        LPDRAWITEMSTRUCT lpDrawItemStruct = (LPDRAWITEMSTRUCT)lParam;
-
-        // See if the message is from our ListView control then forward to subclass
-        if (lpDrawItemStruct->CtlType == ODT_LISTVIEW) {
-            // Forward to subclass
-            SendMessageW(lpDrawItemStruct->hwndItem, LVM_FORWARD_DRAW, wParam, lParam);
-            return TRUE; // handled
-        }
-    }
-    break;
-
-    default:
+        HANDLE_MSG(hWnd, WM_ACTIVATE      , ATW_OnActivate      );
+        HANDLE_MSG(hWnd, WM_CLOSE         , ATW_OnClose         );
+        HANDLE_MSG(hWnd, WM_COMMAND       , ATW_OnCommand       );
+        HANDLE_MSG(hWnd, WM_CONTEXTMENU   , ATW_OnContextMenu   );
+        HANDLE_MSG(hWnd, WM_CREATE        , ATW_OnCreate        );
+        HANDLE_MSG(hWnd, WM_CTLCOLORSTATIC, ATW_OnCtlColorStatic);
+        HANDLE_MSG(hWnd, WM_DESTROY       , ATW_OnDestroy       );
+        HANDLE_MSG(hWnd, WM_DRAWITEM      , ATW_OnDrawItem      );
+        HANDLE_MSG(hWnd, WM_KEYDOWN       , ATW_OnKeyDown       );
+        HANDLE_MSG(hWnd, WM_KILLFOCUS     , ATW_OnKillFocus     );
+        HANDLE_MSG(hWnd, WM_LBUTTONDOWN   , ATW_OnLButtonDown   );
+        HANDLE_MSG(hWnd, WM_NOTIFY        , ATW_OnNotify        );
+        HANDLE_MSG(hWnd, WM_SYSCOMMAND    , ATW_OnSysCommand    );
+        HANDLE_MSG(hWnd, WM_TIMER         , ATW_OnTimer         );
+
+        default:
         return DefWindowProc(hWnd, uMsg, wParam, lParam);
     }
-
-    return FALSE;
 }
 
 bool IsInvisibleWin10BackgroundAppWindow(HWND hWnd) {
@@ -1872,4 +1451,450 @@ bool IsExcludedProcess(const std::wstring& processName) {
            processName) != g_Settings.ProcessExclusionList.end();
     }
     return excluded;
+}
+
+// ----------------------------------------------------------------------------
+// AltTab window procedure handlers
+// ----------------------------------------------------------------------------
+
+BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
+    AT_LOG_TRACE;
+
+    g_hAltTabWnd = hWnd;
+
+    // Get screen width and height
+    const int screenWidth  = GetSystemMetrics(SM_CXSCREEN);
+    const int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+
+    // Compute the window size (e.g., 80% of the screen width and height)
+    const int windowWidth = static_cast<int>(screenWidth * g_Settings.WidthPercentage * 0.01);
+    const int windowHeight = static_cast<int>(screenHeight * g_Settings.HeightPercentage * 0.01);
+
+    // Compute the window position (centered on the screen)
+    const int windowX = (screenWidth - windowWidth) / 2;
+    const int windowY = (screenHeight - windowHeight) / 2;
+    DWORD style = WS_VISIBLE | WS_CHILD | LVS_REPORT | LVS_SHOWSELALWAYS | LVS_OWNERDRAWFIXED;
+    if (!g_Settings.ShowColHeader) {
+        style |= LVS_NOCOLUMNHEADER;
+    }
+
+    // Create Static control for the search string
+    int staticTextHeight = 24;
+
+    // Calculate the required height for the static control based on font size
+    HDC hdc = GetDC(hWnd);
+
+    g_hSSFont = CreateFontEx(hdc, g_Settings.SSFontName, g_Settings.SSFontSize, g_Settings.SSFontStyle);
+    g_hLVFont = CreateFontEx(hdc, g_Settings.LVFontName, g_Settings.LVFontSize, g_Settings.LVFontStyle);
+
+    SelectObject(hdc, g_hSSFont);
+
+    TEXTMETRIC tm;
+    GetTextMetrics(hdc, &tm);
+    staticTextHeight = (int)(tm.tmHeight + tm.tmExternalLeading + 1);
+
+    // Get the DPI of the window/screen
+    int dpi = GetDeviceCaps(hdc, LOGPIXELSX);
+
+    ReleaseDC(hWnd, hdc);
+
+    // While creating static search string control, use 0 for height and
+    // use -1 for the rest of the calculations while adjusting window size.
+    if (!g_Settings.ShowSearchString) {
+        staticTextHeight = 0;
+    }
+
+    int X = 0;
+    int Y = 0;
+    int width = windowWidth;
+    int height = staticTextHeight;
+
+    // AT_LOG_INFO("StaticTextControl: X: %d, Y: %d, width: %d, height: %d", X, Y, width, height);
+
+    // Create a static text control
+    HWND hStaticText = CreateWindowW(
+        L"Static",                         // Static text control class
+        L"Search String: empty",           // Text content
+        WS_CHILD | WS_VISIBLE | SS_CENTER, // Styles
+        X,                                 // X
+        Y,                                 // Y
+        width,                             // Width
+        height,                            // Height
+        hWnd,                              // Parent window
+        (HMENU) nullptr,                   // Menu or control ID (set to NULL for static text)
+        g_hInstance,                       // Instance handle
+        nullptr                            // No window creation data
+    );
+
+    SendMessageW(hStaticText, WM_SETFONT, (WPARAM)g_hSSFont, 0);
+    g_hStaticText = hStaticText;
+
+    // Here adding 1 pixel to the Y position to avoid the static text control overlap with the ListView control
+    if (g_Settings.ShowSearchString) {
+        Y += staticTextHeight + 1;
+    } else {
+        staticTextHeight = -1;
+    }
+
+    // Here, reducing the window width by 1 (-1) to fit the scrollbar properly in the window.
+    // height is reduced by 3 (-3)
+    //  1 pixel for the static text control and listView control overlap
+    //  2 pixels for the upper and bottom border in listview control
+    width = windowWidth - 1;
+    height = windowHeight - staticTextHeight - 3;
+
+    // AT_LOG_INFO("ListViewControl: X: %d, Y: %d, width: %d, height: %d", X, Y, width, height);
+
+    // Create ListView control
+    HWND hListView = CreateWindowExW(
+        0,                   // Optional window styles
+        WC_LISTVIEW,         // Predefined class
+        L"",                 // No window title
+        style,               // Styles
+        X,                   // X
+        Y,                   // Y
+        width,               // Width
+        height,              // Height
+        hWnd,                // Parent window
+        (HMENU)IDC_LISTVIEW, // Control identifier
+        g_hInstance,         // Instance handle
+        nullptr              // No window creation data
+    );
+
+    SendMessageW(hListView, WM_SETFONT, (WPARAM)g_hLVFont, MAKELPARAM(TRUE, 0));
+    g_hListView = hListView;
+
+    // Subclass the ListView control
+    SetWindowSubclass(hListView, ListViewSubclassProc, 1, 0);
+
+    int wndWidth = (int)(screenWidth * g_Settings.WidthPercentage * 0.01);
+    int wndHeight = (int)(screenHeight * g_Settings.HeightPercentage * 0.01);
+
+    g_Settings.WindowWidth = wndWidth;
+    g_Settings.WindowHeight = wndHeight;
+
+    // Add header / columns
+    CustomizeListView(hListView, dpi);
+
+    // Set ListView background and font colors
+    SetListViewCustomColors(hListView, g_Settings.LVBackgroundColor, g_Settings.LVFontColor);
+
+    // Set window transparency
+    SetWindowLong(hWnd, GWL_EXSTYLE, GetWindowLong(hWnd, GWL_EXSTYLE) | WS_EX_LAYERED);
+    SetLayeredWindowAttributes(hWnd, RGB(255, 255, 255), (BYTE)g_Settings.Transparency, LWA_ALPHA);
+
+    // std::vector<AltTabWindowData> altTabWindows;
+    EnumWindows(EnumWindowsProc, (LPARAM)(&g_AltTabWindows));
+    AT_LOG_INFO("g_AltTabWindows.size() : %d", g_AltTabWindows.size());
+
+    // Identify the processes which are running from different paths
+    std::unordered_map<std::wstring, std::unordered_set<std::wstring>> processMap;
+    for (const auto& item : g_AltTabWindows) {
+        const std::wstring key = item.ProcessName + item.Title;
+        processMap[key].insert(item.FullPath);
+    }
+    for (auto& item : g_AltTabWindows) {
+        const std::wstring key = item.ProcessName + item.Title;
+        if (processMap[key].size() > 1) {
+            item.IsConflictProcess = true;
+        }
+    }
+
+    // Create ImageList and add icons
+    const int imageWidth = GetSystemMetrics(SM_CXICON);
+    const int imageHeight = GetSystemMetrics(SM_CYICON);
+
+    // Create ImageList and add icons, assign a dummy ImageList to set the row height
+    // The row height is determined by the height of the icons in the ImageList assigned as LVSIL_SMALL
+    // But the icons in the ImageList are drawn using the ImageList g_hLVImageList.
+    HIMAGELIST hImageListDummy = ImageList_Create(imageWidth, imageHeight + 1, ILC_COLOR32 | ILC_MASK, 0, 1);
+    HIMAGELIST hImageList = ImageList_Create(imageWidth, imageHeight, ILC_COLOR32 | ILC_MASK, 0, 1);
+
+    for (const auto& item : g_AltTabWindows) {
+        ImageList_AddIcon(hImageList, item.hIcon);
+    }
+
+    // Set the ImageList for the ListView
+    // Assign as the small image list (LVSIL_SMALL affects row height)
+    ListView_SetImageList(hListView, hImageListDummy, LVSIL_SMALL);
+    g_hLVImageList = hImageList;
+
+    // Add windows to ListView
+    for (int i = 0; i < g_AltTabWindows.size(); ++i) {
+        AddListViewItem(hListView, i, g_AltTabWindows[i]);
+    }
+
+    // Compute the required height and resize the ListView
+    // Get the header control associated with the ListView
+    HWND hHeader = ListView_GetHeader(g_hListView);
+    int headerHeight = 0;
+    if (hHeader) {
+        RECT rcHeader;
+        GetClientRect(hHeader, &rcHeader);
+        headerHeight = rcHeader.bottom - rcHeader.top;
+    }
+    RECT rcListView;
+    GetClientRect(g_hListView, &rcListView);
+    int itemHeight =
+        ListView_GetItemRect(g_hListView, 0, &rcListView, LVIR_BOUNDS) ? rcListView.bottom - rcListView.top : 0;
+    int itemCount = ListView_GetItemCount(g_hListView);
+    int requiredHeight = itemHeight * itemCount + headerHeight + staticTextHeight + 3;
+
+    if (requiredHeight <= g_Settings.WindowHeight) {
+        SetWindowPos(hWnd, HWND_TOPMOST, windowX, windowY, windowWidth, requiredHeight, SWP_NOZORDER);
+        WindowResizeAndPosition(hWnd, wndWidth, requiredHeight);
+    } else {
+        int scrollBarWidth = GetSystemMetrics(SM_CXVSCROLL);
+        int processNameWidth = GetColProcessNameWidth();
+        int colTitleWidth = g_Settings.WindowWidth - (COL_ICON_WIDTH + processNameWidth) - scrollBarWidth - 1;
+        int lvHeight = (g_Settings.WindowHeight - itemHeight + 1) / itemHeight * itemHeight;
+        requiredHeight = lvHeight + headerHeight + staticTextHeight + 3;
+
+        ListView_SetColumnWidth(hListView, 1, colTitleWidth);
+
+        // Here, reducing the window width by 1 (-1) to fit the scrollbar properly in the window.
+        SetWindowPos(hListView, nullptr, 0, 0, windowWidth - 1, lvHeight, SWP_NOMOVE | SWP_NOZORDER);
+        SetWindowPos(hWnd, HWND_TOPMOST, windowX, windowY, windowWidth, requiredHeight, SWP_NOZORDER);
+        WindowResizeAndPosition(hWnd, wndWidth, requiredHeight);
+    }
+
+    SetForegroundWindow(hWnd);
+    SetFocus(hListView);
+
+    // Select the first row
+    LVITEM lvItem;
+    lvItem.stateMask = LVIS_FOCUSED | LVIS_SELECTED;
+    lvItem.state = LVIS_FOCUSED | LVIS_SELECTED;
+    SendMessageW(hListView, LVM_SETITEMSTATE, 0, (LPARAM)&lvItem);
+
+    // Create a timer to refresh the ListView when there is a change in windows
+    SetTimer(hWnd, TIMER_WINDOW_COUNT, TIMER_WINDOW_COUNT_ELAPSE, nullptr);
+
+    return TRUE;
+}
+
+LRESULT ATW_OnCtlColorStatic(HWND hWnd, HDC hDC, HWND hCtl, UINT /*type*/) {
+    AT_LOG_TRACE;
+    if (hCtl == g_hStaticText) {
+        // Set the text color and background color of the static text control
+        SetTextColor(hDC, g_Settings.SSFontColor);
+        SetBkColor(hDC, g_Settings.SSBackgroundColor);
+
+        return (INT_PTR)CreateSolidBrush(g_Settings.SSBackgroundColor);
+    }
+    return DefWindowProc(hWnd, WM_CTLCOLORSTATIC, (WPARAM)hDC, (LPARAM)hCtl);
+}
+
+void ATW_OnCommand(HWND /*hwnd*/, int id, HWND /*hwndCtl*/, UINT /*codeNotify*/) {
+    AT_LOG_TRACE;
+    if (id == IDOK || id == IDCANCEL) {
+        PostQuitMessage(0);
+    }
+}
+
+void ATW_OnContextMenu(HWND hwnd, HWND /*hwndContext*/, UINT xPos, UINT yPos) {
+    AT_LOG_TRACE;
+
+    POINT pt = { (LONG)xPos, (LONG)yPos };
+    ShowContextMenu(hwnd, pt);
+}
+
+void ATW_OnSysCommand(HWND hwnd, UINT cmd, int x, int y) {
+    AT_LOG_TRACE;
+
+    if (cmd == SC_KEYMENU && (x == -1 && y == -1) /*VK_APPS*/) {
+        // Alt+Space pressed, handle it here
+        POINT cursorPos;
+        GetCursorPos(&cursorPos);
+        TrackPopupMenu(GetSystemMenu(hwnd, FALSE), 0, cursorPos.x, cursorPos.y, 0, hwnd, nullptr);
+    }
+}
+
+void ATW_OnClose(HWND /*hwnd*/) {
+    AT_LOG_TRACE;
+
+    // Release the fonts
+    if (g_hLVFont != nullptr) {
+        DeleteObject(g_hLVFont);
+    }
+    if (g_hSSFont != nullptr) {
+        DeleteObject(g_hSSFont);
+    }
+
+    PostQuitMessage(0);
+}
+
+void ATW_OnKeyDown(HWND /*hwnd*/, UINT vk, BOOL /*fDown*/, int /*cRepeat*/, UINT /*flags*/) {
+    AT_LOG_TRACE;
+
+    if (vk == VK_ESCAPE) {
+        AT_LOG_INFO("WM_KEYDOWN: VK_ESCAPE");
+        // Close the window when Escape key is pressed
+        DestroyAltTabWindow();
+    }
+}
+
+void ATW_OnKillFocus(HWND /*hwnd*/, HWND /*hwndNewFocus*/) {
+    AT_LOG_TRACE;
+}
+
+void ATW_OnLButtonDown(HWND /*hwnd*/, BOOL /*fDoubleClick*/, int /*x*/, int /*y*/, UINT /*keyFlags*/) {
+    AT_LOG_TRACE;
+}
+
+void ATW_OnTimer(HWND /*hwnd*/, UINT /*id*/) {
+    //AT_LOG_TRACE;
+    std::vector<AltTabWindowData> altTabWindows;
+    EnumWindows(EnumWindowsProc, (LPARAM)(&altTabWindows));
+    // AT_LOG_INFO("altTabWindows.size(): %d, g_AltTabWindows.size(): %d", altTabWindows.size(),
+    // g_AltTabWindows.size());
+    bool doRefresh = altTabWindows.size() != g_AltTabWindows.size();
+    if (!doRefresh) {
+        // Deep compare the two vectors and update only if there is a change
+        for (int i = 0; i < altTabWindows.size(); ++i) {
+            const auto& a = altTabWindows[i];
+            const auto& b = g_AltTabWindows[i];
+            if (a.hWnd != b.hWnd || a.hOwner != b.hOwner || a.PID != b.PID || a.Title != b.Title
+                || a.ProcessName != b.ProcessName) {
+                doRefresh = true;
+                break;
+            }
+        }
+    }
+    if (doRefresh) {
+        RefreshAltTabWindow();
+    }
+}
+
+void ATW_OnActivate(HWND /*hwnd*/, UINT state, HWND /*hwndActDeact*/, BOOL /*fMinimized*/) {
+    AT_LOG_TRACE;
+    if (state == WA_INACTIVE) {
+        AT_LOG_INFO("WM_ACTIVATE: The application is becoming inactive, close the window");
+        // The application is becoming inactive, close the window
+        DestroyAltTabWindow();
+    }
+}
+
+void ATW_OnDestroy(HWND hwnd) {
+    AT_LOG_TRACE;
+    KillTimer(hwnd, TIMER_WINDOW_COUNT);
+}
+
+void ATW_OnDrawItem(HWND /*hwnd*/, const DRAWITEMSTRUCT* lpDrawItem) {
+    //AT_LOG_TRACE;
+    //AT_LOG_INFO("hwndItem: %#x CtlType: %d, itemID: %2d, itemAction: %d, itemState: %#4x",
+    //    lpDrawItem->hwndItem,
+    //    lpDrawItem->CtlType,
+    //    lpDrawItem->itemID,
+    //    lpDrawItem->itemAction,
+    //    lpDrawItem->itemState);
+    // See if the message is from our ListView control then forward to subclass
+    if (lpDrawItem->CtlType == ODT_LISTVIEW) {
+        // Forward to subclass
+        SendMessageW(lpDrawItem->hwndItem, WM_DRAWITEM, 0, (LPARAM)lpDrawItem);
+    }
+}
+
+BOOL ATW_OnNotify(HWND /*hwnd*/, int /*idFrom*/, NMHDR* pnmhdr) {
+    if (pnmhdr->hwndFrom == g_hListView && pnmhdr->code == LVN_HOTTRACK) {
+        LPNMLISTVIEW pnmListView = reinterpret_cast<LPNMLISTVIEW>(pnmhdr);
+
+        // After adding LVS_OWNERDRAWFIXED to listview, we are getting -1 in iItem
+        // So, try to get the item under the cursor position using hit test.
+        POINT pt;
+        GetCursorPos(&pt);
+
+        const POINT ptScreenPos = pt;
+
+        ScreenToClient(g_hListView, &pt);
+        const POINT ptClientPos = pt;
+
+        if (pnmListView->iItem < 0) {
+            LVHITTESTINFO ht = { 0 };
+            ht.pt = ptClientPos;
+            if (ListView_SubItemHitTest(g_hListView, &ht) != -1) {
+                pnmListView->iItem = ht.iItem;
+            }
+        }
+        // Check if the mouse is over on close button area then change the button image to active
+        if (g_rcBtnClose.left <= ptClientPos.x && ptClientPos.x <= g_rcBtnClose.right
+            && g_rcBtnClose.top <= ptClientPos.y && ptClientPos.y <= g_rcBtnClose.bottom) {
+            if (!g_IsMouseOverCloseButton) {
+                g_IsMouseOverCloseButton = true;
+                // Invalidate the button area to redraw
+                InvalidateRect(g_hListView, &g_rcBtnClose, FALSE);
+            }
+        } else {
+            if (g_IsMouseOverCloseButton) {
+                g_IsMouseOverCloseButton = false;
+                // Invalidate the button area to redraw
+                InvalidateRect(g_hListView, &g_rcBtnClose, FALSE);
+            }
+        }
+
+        if (pnmListView->iItem != g_nLVHotItem) {
+            const int oldItem = g_nLVHotItem;
+            g_nLVHotItem = pnmListView->iItem;
+
+            // Invalidate only old + new row
+            if (oldItem >= 0) {
+                RECT rc;
+                ListView_GetItemRect(g_hListView, oldItem, &rc, LVIR_BOUNDS);
+                InvalidateRect(g_hListView, &rc, FALSE);
+            }
+
+            if (g_nLVHotItem >= 0) {
+                RECT rc;
+                ListView_GetItemRect(g_hListView, g_nLVHotItem, &rc, LVIR_BOUNDS);
+                InvalidateRect(g_hListView, &rc, FALSE);
+            }
+        }
+
+        // Check if the mouse is hovering over an item
+        if (g_Settings.ShowProcessInfoTooltip && pnmListView->iItem >= 0
+            && (pnmListView->iItem != g_MouseHoverIndex || !g_TooltipVisible)) {
+            g_MouseHoverIndex = pnmListView->iItem;
+
+            HideCustomToolTip();
+
+            // The mouse is over an item
+            const std::wstring tooltip = std::format(
+                L"Title: {}\nPath: {}\nDescription: {} {}\nCompanyName: {}\nPID: {}",
+                g_AltTabWindows[g_MouseHoverIndex].Title,
+                g_AltTabWindows[g_MouseHoverIndex].FullPath,
+                g_AltTabWindows[g_MouseHoverIndex].Description,
+                g_AltTabWindows[g_MouseHoverIndex].Version,
+                g_AltTabWindows[g_MouseHoverIndex].CompanyName,
+                g_AltTabWindows[g_MouseHoverIndex].PID);
+
+            // Show the tooltip just below the item
+            RECT itemRect;
+            if (ListView_GetItemRect(g_hListView, g_MouseHoverIndex, &itemRect, LVIR_BOUNDS)) {
+                pt.x = ptClientPos.x;
+                pt.y = itemRect.bottom + 1;
+                ClientToScreen(g_hListView, &pt);
+                pt.x = ptScreenPos.x + 36;
+                ShowCustomToolTipAt(tooltip, pt, -1);
+            }
+        }
+        return TRUE;
+    }
+
+    if (pnmhdr->code == NM_CLICK) {
+        // Check if the single-click event is from your ListView control
+        if (pnmhdr->hwndFrom == g_hListView) {
+            // First check if the mouse is over on close button area
+            if (g_IsMouseOverCloseButton) {
+                // Close the window of the item under mouse cursor
+                if (g_nLVHotItem != -1) {
+                    ATCloseWindow(g_nLVHotItem);
+                }
+            } else {
+                DestroyAltTabWindow(true);
+            }
+            return TRUE;
+        }
+    }
+
+    return FALSE;
 }
