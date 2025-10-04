@@ -67,6 +67,7 @@
 - [x] Make the AltTab window high DPI aware.
 - [x] Reload settings when the settings file is modified manually.
 - [x] Run as Administrator
+- [x] Close the AltTab window when the application is becoming inactive.
 - [ ] Add support for multiple monitors.
 - [ ] Option to disable tray icon in .ini file.
 - [ ] Option to specify the rounded corners in AltTab settings UI.

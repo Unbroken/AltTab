@@ -58,6 +58,7 @@ bool            g_IsAltBacktick        = false;                // Is Alt+Backtic
 DWORD           g_MainThreadID         = GetCurrentThreadId(); // Main thread ID
 DWORD           g_idThreadAttachTo     = 0;
 HIMAGELIST      g_hImageList           = nullptr;
+HIMAGELIST      g_hLVImageList         = nullptr;
 int             g_nImgCloseActiveInd   = -1;
 int             g_nImgCloseInactiveInd = -1;
 
@@ -453,8 +454,8 @@ INT_PTR CALLBACK ATAboutDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
     {
     case WM_INITDIALOG: {
         HICON hIcon = LoadIcon(g_hInstance, MAKEINTRESOURCE(IDI_ALTTAB));
-        SendMessage(hDlg, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
-        SendMessage(hDlg, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
+        SendMessageW(hDlg, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+        SendMessageW(hDlg, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
 
         // Center the dialog on the screen
         int screenWidth  = GetSystemMetrics(SM_CXSCREEN);
@@ -503,8 +504,8 @@ INT_PTR CALLBACK ATAboutDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
         break;
 
     case WM_DESTROY:
-        DestroyIcon((HICON)SendMessage(hDlg, WM_GETICON, ICON_SMALL, 0));
-        DestroyIcon((HICON)SendMessage(hDlg, WM_GETICON, ICON_BIG, 0));
+        DestroyIcon((HICON)SendMessageW(hDlg, WM_GETICON, ICON_SMALL, 0));
+        DestroyIcon((HICON)SendMessageW(hDlg, WM_GETICON, ICON_BIG, 0));
         break;
     }
     return (INT_PTR)FALSE;
@@ -576,12 +577,12 @@ void ActivateWindow(HWND hTargetWnd) {
  * 
  * \param activate   Input parameter to activate the selected window or not
  */
-void DestroyAltTabWindow(bool activate) {
+void DestroyAltTabWindow(const bool activate) {
     if (g_hAltTabWnd == nullptr || g_hAltTabIsBeingClosed) {
         return;
     }
 
-    AT_LOG_TRACE;
+    AT_LOG_INFO("DestroyAltTabWindow: activate = %d", activate);
 
     // Set flag to true to avoid re-entry from WM_ACTIVATEAPP
     g_hAltTabIsBeingClosed = true;
@@ -964,14 +965,37 @@ void TrayContextMenuItemHandler(HWND hWnd, HMENU hSubMenu, UINT menuItemId) {
     } break;
 
     case ID_TRAYCONTEXTMENU_CLOSEALLWINDOWS: {
-        AT_LOG_INFO("ID_TRAYCONTEXTMENU_CLOSEALLWINDOWS");
+        // Get AltTab windows
+        std::vector<AltTabWindowData> altTabWindows = GetAltTabWindows();
+        AT_LOG_INFO("ID_TRAYCONTEXTMENU_CLOSEALLWINDOWS: altTabWindows.size(): %zu", altTabWindows.size());
+        if (altTabWindows.empty()) {
+            ShowCustomToolTip(L"No windows to close.", 3000);
+            return;
+        }
+
         const int result = MessageBoxW(
             hWnd,
             L"Are you sure you want to close all windows?",
             AT_PRODUCT_NAMEW L": Close All Windows",
             MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
+
         if (result == IDYES) {
-            for (const auto& winInfo : g_AltTabWindows) {
+            for (const auto& winInfo : altTabWindows) {
+#ifdef _DEBUG
+                // Ignore Visual Studio IDEs in debug mode
+                if (EqualsIgnoreCase(winInfo.ProcessName, L"devenv.exe")
+                    || EqualsIgnoreCase(winInfo.ProcessName, L"AltTab.exe")) {
+                    AT_LOG_INFO(
+                        "Ignoring: ProcessName: [%-15ls], Title:[%ls] ...",
+                        winInfo.ProcessName.c_str(),
+                        winInfo.Title.c_str());
+                    continue;
+                }
+#endif // _DEBUG
+                AT_LOG_INFO(
+                    "Closing : ProcessName: [%-15ls], Title:[%ls] ...",
+                    winInfo.ProcessName.c_str(),
+                    winInfo.Title.c_str());
                 PostMessage(winInfo.hWnd, WM_CLOSE, 0, 0);
             }
         }
@@ -1254,7 +1278,7 @@ BOOL CALLBACK EnumWindowsProcNAT(HWND hwnd, LPARAM lParam) {
     char className[256] = { 0 };
     GetClassNameA(hwnd, className, sizeof(className));
 
-    if (strcmp(className, "TaskSwitcherWnd") == 0 || strcmp(className, "MultitaskingViewFrame") == 0) {
+    if (EqualsIgnoreCase(className, "TaskSwitcherWnd") || EqualsIgnoreCase(className, "MultitaskingViewFrame")) {
         *reinterpret_cast<bool*>(lParam) = true;
         return FALSE; // Stop enumerating
     }
@@ -1266,9 +1290,7 @@ bool IsNativeATWDisplayed() {
     HWND hWnd = GetForegroundWindow();
     char className[256] = { 0 };
     GetClassNameA(hWnd, className, 256);
-    return
-       strcmp(className, "TaskSwitcherWnd") == 0 ||
-       strcmp(className, "MultitaskingViewFrame") == 0;
+    return EqualsIgnoreCase(className, "TaskSwitcherWnd") || EqualsIgnoreCase(className, "MultitaskingViewFrame");
 }
 
 BOOL IsHungAppWindowEx(HWND hwnd) {
@@ -1329,11 +1351,11 @@ std::wstring GetAppDirPath() {
 
 void LogLastErrorInfo() {
     // Get the last error code
-    DWORD errorCode = GetLastError();
+    const DWORD errorCode = GetLastError();
 
     // Get the error message
     LPVOID errorMessage;
-    FormatMessage(
+    FormatMessageW(
         FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
         nullptr,
         errorCode,
@@ -1385,12 +1407,12 @@ void CreateCustomToolTip() {
     g_ToolInfo.rect.bottom = 0;
 
 	 // Send an add tool message to the tooltip control window
-    SendMessage(g_hCustomToolTip, TTM_ADDTOOL, 0, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
+    SendMessageW(g_hCustomToolTip, TTM_ADDTOOL, 0, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
 
     // Enable multiple lines
-    SendMessage(g_hCustomToolTip, TTM_SETMAXTIPWIDTH, 0, MAXINT);
+    SendMessageW(g_hCustomToolTip, TTM_SETMAXTIPWIDTH, 0, MAXINT);
 
-    SendMessage(g_hCustomToolTip, TTM_SETTIPBKCOLOR, RGB(255, 255, 0), 0);
+    SendMessageW(g_hCustomToolTip, TTM_SETTIPBKCOLOR, RGB(255, 255, 0), 0);
 }
 
 DWORD WINAPI ShowCustomToolTipThread(LPVOID pvParam) {
@@ -1405,9 +1427,9 @@ DWORD WINAPI ShowCustomToolTipThread(LPVOID pvParam) {
     int duration        = tti->Duration;
     g_ToolInfo.lpszText = (LPWSTR)tti->ToolTipText.c_str();
 
-    SendMessage(g_hCustomToolTip, TTM_SETTOOLINFO  ,    0, (LPARAM)&g_ToolInfo);
-    SendMessage(g_hCustomToolTip, TTM_TRACKPOSITION,    0, (LPARAM)(DWORD)MAKELONG(pt.x + 0, pt.y + 0));
-    SendMessage(g_hCustomToolTip, TTM_TRACKACTIVATE, true, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
+    SendMessageW(g_hCustomToolTip, TTM_SETTOOLINFO  ,    0, (LPARAM)&g_ToolInfo);
+    SendMessageW(g_hCustomToolTip, TTM_TRACKPOSITION,    0, (LPARAM)(DWORD)MAKELONG(pt.x + 0, pt.y + 0));
+    SendMessageW(g_hCustomToolTip, TTM_TRACKACTIVATE, true, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
     if (duration != -1) {
         AT_LOG_INFO("Start TIMER_CUSTOM_TOOLTIP timer");
         g_TooltipTimerId = SetTimer(nullptr, TIMER_CUSTOM_TOOLTIP, duration, HideCustomToolTip);
@@ -1429,10 +1451,11 @@ void ShowCustomToolTip(const std::wstring& tooltipText, const int duration /*= 3
        POINT pt;
        GetCursorPos(&pt);
 
+       // Slight offset to avoid covering the mouse pointer
        g_ToolInfo.lpszText = (LPWSTR)(LPCWSTR)tooltipText.c_str();
-       SendMessage(g_hCustomToolTip, TTM_SETTOOLINFO,      0, (LPARAM)&g_ToolInfo);
-       SendMessage(g_hCustomToolTip, TTM_TRACKPOSITION,    0, (LPARAM)(DWORD)MAKELONG(pt.x + 12, pt.y + 12));
-       SendMessage(g_hCustomToolTip, TTM_TRACKACTIVATE, true, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
+       SendMessageW(g_hCustomToolTip, TTM_SETTOOLINFO,      0, (LPARAM)&g_ToolInfo);
+       SendMessageW(g_hCustomToolTip, TTM_TRACKPOSITION,    0, (LPARAM)(DWORD)MAKELONG(pt.x + 12, pt.y + 12));
+       SendMessageW(g_hCustomToolTip, TTM_TRACKACTIVATE, true, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
    
        g_TooltipTimerId = SetTimer(nullptr, TIMER_CUSTOM_TOOLTIP, duration, HideCustomToolTip);
        g_TooltipVisible = true;
@@ -1444,9 +1467,9 @@ void ShowCustomToolTipAt(const std::wstring& tooltipText, const POINT& pt, const
     AT_LOG_TRACE;
     if (!g_TooltipVisible) {
         g_ToolInfo.lpszText = (LPWSTR)(LPCWSTR)tooltipText.c_str();
-        SendMessage(g_hCustomToolTip, TTM_SETTOOLINFO  , 0   , (LPARAM)&g_ToolInfo);
-        SendMessage(g_hCustomToolTip, TTM_TRACKPOSITION, 0   , (LPARAM)(DWORD)MAKELONG(pt.x, pt.y));
-        SendMessage(g_hCustomToolTip, TTM_TRACKACTIVATE, true, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
+        SendMessageW(g_hCustomToolTip, TTM_SETTOOLINFO  ,    0, (LPARAM)&g_ToolInfo);
+        SendMessageW(g_hCustomToolTip, TTM_TRACKPOSITION,    0, (LPARAM)(DWORD)MAKELONG(pt.x, pt.y));
+        SendMessageW(g_hCustomToolTip, TTM_TRACKACTIVATE, true, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
 
         g_TooltipTimerId = SetTimer(nullptr, TIMER_CUSTOM_TOOLTIP, duration, HideCustomToolTip);
         g_TooltipVisible = true;
@@ -1456,7 +1479,7 @@ void ShowCustomToolTipAt(const std::wstring& tooltipText, const POINT& pt, const
 void CALLBACK HideCustomToolTip(HWND /*hWnd*/, UINT /*uMsg*/, UINT_PTR /*idEvent*/, DWORD /*dwTime*/) {
     AT_LOG_TRACE;
     KillTimer(nullptr, g_TooltipTimerId);
-    SendMessage(g_hCustomToolTip, TTM_TRACKACTIVATE, false, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
+    SendMessageW(g_hCustomToolTip, TTM_TRACKACTIVATE, false, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
     g_TooltipVisible = false;
 }
 

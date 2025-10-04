@@ -56,6 +56,7 @@ extern int                                  g_MouseHoverIndex;
 extern DWORD                                g_MainThreadID;
 extern std::wstring                         g_SearchString;
 extern HIMAGELIST                           g_hImageList;
+extern HIMAGELIST                           g_hLVImageList;
 extern int                                  g_nImgCloseActiveInd;
 extern int                                  g_nImgCloseInactiveInd;
 extern RECT                                 g_rcBtnClose;

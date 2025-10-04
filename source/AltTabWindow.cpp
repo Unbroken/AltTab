@@ -198,7 +198,6 @@ namespace AT {
 
             // Draw icon (first column usually)
             if (col == 0 && lvItem.iImage >= 0) {
-                HIMAGELIST hImgList = ListView_GetImageList(hListView, LVSIL_SMALL);
                 // ImageList_Draw(hImgList, lvItem.iImage, hdc, rcSub.left + 2, rcSub.top + 0, ILD_TRANSPARENT);
                 //  Calculate rect for icon
                 int rowHeight = rcSub.bottom - rcSub.top;
@@ -207,7 +206,7 @@ namespace AT {
                 int x = rcSub.left + 2;
                 int y = rcSub.top + (rowHeight - iconSize) / 2; // vertically centered
 
-                ImageList_DrawEx(hImgList, rowIndex, hdc, x, y, iconSize, iconSize, CLR_NONE, CLR_NONE, ILD_NORMAL);
+                ImageList_DrawEx(g_hLVImageList, rowIndex, hdc, x, y, iconSize, iconSize, CLR_NONE, CLR_NONE, ILD_NORMAL);
             } else if (col == 1) {
                 // Leave some margin at left
                 rcSub.left += 3;
@@ -215,7 +214,7 @@ namespace AT {
                 // Draw title and subtext (if conflict process)
                 if (pWindowData->IsConflictProcess) {
                     // Just append the version to the title for conflict processes
-                    const std::wstring title = pWindowData->Title + L" (Ver: " + pWindowData->Version + L")";
+                    const std::wstring title = pWindowData->Title + L" - [v" + pWindowData->Version + L"]";
                     DrawText(hdc, title.c_str(), -1, &rcSub, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
                 } else {
                     DrawText(hdc, pWindowData->Title.c_str(), -1, &rcSub, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
@@ -271,11 +270,11 @@ HICON GetWindowIcon(HWND hWnd) {
             return hIcon;
 
         // If the large icon is not available, try to get the small icon
-        hIcon = (HICON)SendMessage(hWnd, WM_GETICON, ICON_SMALL2, 0);
+        hIcon = (HICON)SendMessageW(hWnd, WM_GETICON, ICON_SMALL2, 0);
         if (hIcon)
             return hIcon;
 
-        hIcon = (HICON)SendMessage(hWnd, WM_GETICON, ICON_SMALL, 0);
+        hIcon = (HICON)SendMessageW(hWnd, WM_GETICON, ICON_SMALL, 0);
         if (hIcon)
             return hIcon;
     }
@@ -336,7 +335,7 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
                     AT::GetPEInfo(item.FullPath, item.Description, item.Version, item.CompanyName);
 
                     auto* vItems   = (std::vector<AltTabWindowData>*)lParam;
-                    bool  insert   = false;
+                    bool  insert   = true;
                     bool  excluded = IsExcludedProcess(ToLower(item.ProcessName));
 
                     // If Alt+Tab is pressed, show all windows
@@ -495,16 +494,23 @@ void RefreshAltTabWindow() {
         }
     }
 
-    // Create ImageList and add icons
-    HIMAGELIST hImageList =
-        ImageList_Create(GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), ILC_COLOR32 | ILC_MASK, 0, 1);
+    const int imageWidth = GetSystemMetrics(SM_CXICON);
+    const int imageHeight = GetSystemMetrics(SM_CYICON);
+
+    // Create ImageList and add icons, assign a dummy ImageList to set the row height
+    // The row height is determined by the height of the icons in the ImageList assigned as LVSIL_SMALL
+    // But the icons in the ImageList are drawn using the ImageList g_hLVImageList.
+    HIMAGELIST hImageListDummy = ImageList_Create(imageWidth, imageHeight + 1, ILC_COLOR32 | ILC_MASK, 0, 1);
+    HIMAGELIST hImageList = ImageList_Create(imageWidth, imageHeight, ILC_COLOR32 | ILC_MASK, 0, 1);
 
     for (const auto& item : g_AltTabWindows) {
         ImageList_AddIcon(hImageList, item.hIcon);
     }
 
     // Set the ImageList for the ListView
-    ListView_SetImageList(g_hListView, hImageList, LVSIL_SMALL);
+    // Assign as the small image list (LVSIL_SMALL affects row height)
+    ListView_SetImageList(g_hListView, hImageListDummy, LVSIL_SMALL);
+    g_hLVImageList = hImageList;
 
     // Add windows to ListView
     for (int i = 0; i < g_AltTabWindows.size(); ++i) {
@@ -593,21 +599,21 @@ int ATWListViewGetSelectedItem() {
 void ATWListViewPageDown() {
     AT_LOG_TRACE;
     // Scroll down one page (assuming item height is the default)
-    SendMessage(g_hListView, LVM_SCROLL, 0, 1);
+    SendMessageW(g_hListView, LVM_SCROLL, 0, 1);
 
     // Optionally, you can add a delay if needed
     Sleep(100); // Sleep for 100 milliseconds
 
     // Scroll up one page
-    SendMessage(g_hListView, LVM_SCROLL, 0, -1);
+    SendMessageW(g_hListView, LVM_SCROLL, 0, -1);
 
-    //SendMessage(g_hListView, WM_VSCROLL, MAKEWPARAM(SB_PAGEDOWN, 0), 0);
+    //SendMessageW(g_hListView, WM_VSCROLL, MAKEWPARAM(SB_PAGEDOWN, 0), 0);
 
     //int selectedRow = (int)SendMessageW(g_hListView, LVM_GETNEXTITEM, (WPARAM)-1, LVNI_SELECTED);
     //LVITEM lvItem;
     //lvItem.stateMask = LVIS_FOCUSED | LVIS_SELECTED;
     //lvItem.state = LVIS_FOCUSED | LVIS_SELECTED;
-    //SendMessage(g_hListView, LVN_KEYDOWN, (WPARAM)VK_NEXT, (LPARAM)&lvItem);
+    //SendMessageW(g_hListView, LVN_KEYDOWN, (WPARAM)VK_NEXT, (LPARAM)&lvItem);
 }
 
 bool RegisterAltTabWindow() {
@@ -742,11 +748,11 @@ HFONT CreateFontEx(HDC hdc, const std::wstring& fontName, int fontSize, const st
 
 static void SetListViewCustomColors(HWND hListView, COLORREF backgroundColor, COLORREF textColor) {
     // Set the background color
-    SendMessage(hListView, LVM_SETBKCOLOR,     0, (LPARAM)backgroundColor);
-    SendMessage(hListView, LVM_SETTEXTBKCOLOR, 0, (LPARAM)backgroundColor);
+    SendMessageW(hListView, LVM_SETBKCOLOR,     0, (LPARAM)backgroundColor);
+    SendMessageW(hListView, LVM_SETTEXTBKCOLOR, 0, (LPARAM)backgroundColor);
 
     // Set the text color
-    SendMessage(hListView, LVM_SETTEXTCOLOR,   0, (LPARAM)textColor);
+    SendMessageW(hListView, LVM_SETTEXTCOLOR,   0, (LPARAM)textColor);
 }
 
 LRESULT CALLBACK ListViewSubclassProc(
@@ -930,7 +936,7 @@ LRESULT CALLBACK ListViewSubclassProc(
                 update = true;
             }
             AT_LOG_INFO("Char: %#4x, SearchString: [%s]", ch, WStrToUTF8(g_SearchString).c_str());
-            update&& SendMessage(g_hStaticText, WM_SETTEXT, 0, (LPARAM)(L"Search String: " + g_SearchString).c_str());
+            update&& SendMessageW(g_hStaticText, WM_SETTEXT, 0, (LPARAM)(L"Search String: " + g_SearchString).c_str());
         }
         // AT_LOG_INFO("Not handled: wParam: %0#4x, iswprint: %d", wParam, iswprint((wint_t)wParam));
     } break;
@@ -1053,7 +1059,7 @@ INT_PTR CALLBACK AltTabWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
             nullptr                             // No window creation data
         );
 
-        SendMessage(hStaticText, WM_SETFONT, (WPARAM)g_hSSFont, 0);
+        SendMessageW(hStaticText, WM_SETFONT, (WPARAM)g_hSSFont, 0);
         g_hStaticText = hStaticText;
 
         // Here adding 1 pixel to the Y position to avoid the static text control overlap with the ListView control
@@ -1088,7 +1094,7 @@ INT_PTR CALLBACK AltTabWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
             nullptr                                // No window creation data
         );
 
-        SendMessage(hListView, WM_SETFONT, (WPARAM)g_hLVFont, MAKELPARAM(TRUE, 0));
+        SendMessageW(hListView, WM_SETFONT, (WPARAM)g_hLVFont, MAKELPARAM(TRUE, 0));
         g_hListView = hListView;
 
         // Subclass the ListView control
@@ -1128,8 +1134,14 @@ INT_PTR CALLBACK AltTabWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         }
 
         // Create ImageList and add icons
-        HIMAGELIST hImageList =
-            ImageList_Create(GetSystemMetrics(SM_CXICON), GetSystemMetrics(SM_CYICON), ILC_COLOR32 | ILC_MASK, 0, 1);
+        const int imageWidth = GetSystemMetrics(SM_CXICON);
+        const int imageHeight = GetSystemMetrics(SM_CYICON);
+
+        // Create ImageList and add icons, assign a dummy ImageList to set the row height
+        // The row height is determined by the height of the icons in the ImageList assigned as LVSIL_SMALL
+        // But the icons in the ImageList are drawn using the ImageList g_hLVImageList.
+        HIMAGELIST hImageListDummy = ImageList_Create(imageWidth, imageHeight + 1, ILC_COLOR32 | ILC_MASK, 0, 1);
+        HIMAGELIST hImageList = ImageList_Create(imageWidth, imageHeight, ILC_COLOR32 | ILC_MASK, 0, 1);
 
         for (const auto& item : g_AltTabWindows) {
             ImageList_AddIcon(hImageList, item.hIcon);
@@ -1137,7 +1149,8 @@ INT_PTR CALLBACK AltTabWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
 
         // Set the ImageList for the ListView
         // Assign as the small image list (LVSIL_SMALL affects row height)
-        ListView_SetImageList(hListView, hImageList, LVSIL_SMALL);
+        ListView_SetImageList(hListView, hImageListDummy, LVSIL_SMALL);
+        g_hLVImageList = hImageList;
 
         // Add windows to ListView
         for (int i = 0; i < g_AltTabWindows.size(); ++i) {
@@ -1184,7 +1197,7 @@ INT_PTR CALLBACK AltTabWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         LVITEM lvItem;
         lvItem.stateMask = LVIS_FOCUSED | LVIS_SELECTED;
         lvItem.state     = LVIS_FOCUSED | LVIS_SELECTED;
-        SendMessage(hListView, LVM_SETITEMSTATE, 0, (LPARAM)&lvItem);
+        SendMessageW(hListView, LVM_SETITEMSTATE, 0, (LPARAM)&lvItem);
 
         // Create a timer to refresh the ListView when there is a change in windows
         SetTimer(hWnd, TIMER_WINDOW_COUNT, TIMER_WINDOW_COUNT_ELAPSE, nullptr);
@@ -1371,7 +1384,20 @@ INT_PTR CALLBACK AltTabWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         std::vector<AltTabWindowData> altTabWindows;
         EnumWindows(EnumWindowsProc, (LPARAM)(&altTabWindows));
         //AT_LOG_INFO("altTabWindows.size(): %d, g_AltTabWindows.size(): %d", altTabWindows.size(), g_AltTabWindows.size());
-        if (altTabWindows.size() != g_AltTabWindows.size()) {
+        bool doRefresh = altTabWindows.size() != g_AltTabWindows.size();
+        if (!doRefresh && altTabWindows.size() == g_AltTabWindows.size()) {
+            // Deep compare the two vectors and update only if there is a change
+            for (int i = 0; i < altTabWindows.size(); ++i) {
+                const auto& a = altTabWindows[i];
+                const auto& b = g_AltTabWindows[i];
+                if (a.hWnd != b.hWnd || a.hOwner != b.hOwner || a.PID != b.PID || a.Title != b.Title
+                    || a.ProcessName != b.ProcessName) {
+                    doRefresh = true;
+                    break;
+                }
+            }
+        }
+        if (doRefresh) {
             RefreshAltTabWindow();
         }
     }
@@ -1408,7 +1434,7 @@ INT_PTR CALLBACK AltTabWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         // See if the message is from our ListView control then forward to subclass
         if (lpDrawItemStruct->CtlType == ODT_LISTVIEW) {
             // Forward to subclass
-            SendMessage(lpDrawItemStruct->hwndItem, LVM_FORWARD_DRAW, wParam, lParam);
+            SendMessageW(lpDrawItemStruct->hwndItem, LVM_FORWARD_DRAW, wParam, lParam);
             return TRUE; // handled
         }
     }
@@ -1716,6 +1742,7 @@ void ContextMenuItemHandler(HWND hWnd, HMENU /*hSubMenu*/, UINT menuItemId) {
     case ID_CONTEXTMENU_EXIT:
     case ID_TRAYCONTEXTMENU_EXIT:
         AT_LOG_INFO("ID_CONTEXTMENU_EXIT");
+        DestroyAltTabWindow();
         PostQuitMessage(0);
         //int result = MessageBoxW(
         //    hWnd,
@@ -1749,7 +1776,7 @@ void ATCloseWindow(const int index) {
     if (index >= 0 && index < g_AltTabWindows.size()) {
         AltTabWindowData& windowData = g_AltTabWindows[index];
         windowData.IsBeingClosed = true;
-        AT_LOG_INFO("ATCloseWindow: index: %d, Title: %ls", index, g_AltTabWindows[index].Title.c_str());
+        AT_LOG_INFO("ATCloseWindow: index: %d, hWnd: %#x, hOwner: %#x, Title: %ls", index, windowData.hWnd, windowData.hOwner, windowData.Title.c_str());
 
         // Send REDRAW message immediately
         ListView_RedrawItems(g_hListView, index, index);
@@ -1758,7 +1785,22 @@ void ATCloseWindow(const int index) {
         // Allow some time for the redraw to complete so that the use can see the change
         Sleep(50);
 
-        PostMessageW(windowData.hWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
+        // If there is a modal dialog box is open for the window, both WM_CLOSE and SC_CLOSE will
+        // close the dialog box on sending the WM_CLOSE on the hWnd instead of closing the actual window.
+        // The reason behind this is actual window handle (hOwner) is not the foreground window, instead 
+        // the dialog box is the foreground window.
+        // And sending WM_CLOSE to hOwner will not close the actual window if there is no dialog box.
+        // So, first send SC_CLOSE to hWnd, wait for some time and then send SC_CLOSE to hOwner if hOwner
+        // is different than hWnd.
+        SendMessageW(windowData.hWnd, WM_SYSCOMMAND, SC_CLOSE, 0);
+        Sleep(50);
+
+        // If the hWnd is not same as hOwner then also send the SC_CLOSE to hOwner
+        if (windowData.hOwner != windowData.hWnd && IsWindow(windowData.hOwner)) {
+            SendMessageW(windowData.hOwner, WM_SYSCOMMAND, SC_CLOSE, 0);
+        }
+
+        // TODO: Check if still the window is not closed then try to send WM_CLOSE
     }
 }
 
@@ -1807,6 +1849,12 @@ bool ATMapVirtualKey(UINT uCode, wchar_t& vkCode) {
         case VK_OEM_102:      vkCode = isShiftPressed ? L'>' : L'<';  return true;
     }
     return false;
+}
+
+std::vector<AltTabWindowData> GetAltTabWindows() {
+    std::vector<AltTabWindowData> altTabWindows;
+    EnumWindows(EnumWindowsProc, (LPARAM)(&altTabWindows));
+    return altTabWindows;
 }
 
 /*!

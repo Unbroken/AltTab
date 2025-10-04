@@ -77,3 +77,5 @@ void SetAltTabActiveWindow();
  * \return Return true if the given uCode is a printable character otherwise false.
  */
 bool ATMapVirtualKey(UINT uCode, wchar_t& ch);
+
+std::vector<AltTabWindowData> GetAltTabWindows();

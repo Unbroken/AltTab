@@ -28,7 +28,7 @@ void ShowTrayContextMenu(HWND hWnd, POINT pt);
 
 void TrayContextMenuItemHandler(HWND hWnd, HMENU hSubMenu, UINT menuItemId);
 
-void DestroyAltTabWindow(bool activate = false);
+void DestroyAltTabWindow(const bool activate = false);
 
 void ToggleCheckState(HMENU hMenu, UINT menuItemID);
 

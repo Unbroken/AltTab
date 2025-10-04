@@ -27,7 +27,7 @@ HWND              g_hToolTip           = nullptr;
     toolInfo.hwnd = GetDlgItem(hDlg, id);                                        \
     toolInfo.lpszText = (LPWSTR)text;                                            \
     GetClientRect(toolInfo.hwnd, &toolInfo.rect);                                \
-    SendMessage(g_hToolTip, TTM_ADDTOOL, 0, reinterpret_cast<LPARAM>(&toolInfo));
+    SendMessageW(g_hToolTip, TTM_ADDTOOL, 0, reinterpret_cast<LPARAM>(&toolInfo));
 
 
 void ATSettingsInitDialog(HWND hDlg, const AltTabSettings& settings);
@@ -164,10 +164,10 @@ void AddTooltips(HWND hDlg) {
     toolInfo.uFlags   = TTF_SUBCLASS;
 
     // Enable multiple lines
-    SendMessage(g_hToolTip, TTM_SETMAXTIPWIDTH, 0, MAXINT);
+    SendMessageW(g_hToolTip, TTM_SETMAXTIPWIDTH, 0, MAXINT);
 
     // TODO: Not working
-    SendMessage(g_hToolTip, TTM_SETTIPBKCOLOR, RGB(255, 255, 0), 0);
+    SendMessageW(g_hToolTip, TTM_SETTIPBKCOLOR, RGB(255, 255, 0), 0);
 
     ADD_TOOLTIP(IDC_CHECK_ALT_TAB                 , TT_HOTKEY_ALT_TAB            );
     ADD_TOOLTIP(IDC_CHECK_ALT_BACKTICK            , TT_HOTKEY_ALT_BACKTICK       );
@@ -207,8 +207,8 @@ INT_PTR CALLBACK ATSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARA
 
         HICON hIcon        = LoadIcon(g_hInstance, MAKEINTRESOURCE(IDI_ALTTAB));
 
-        SendMessage(hDlg, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
-        SendMessage(hDlg, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
+        SendMessageW(hDlg, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+        SendMessageW(hDlg, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
 
         ATSettingsInitDialog(hDlg, g_Settings);
 
@@ -348,12 +348,12 @@ INT_PTR CALLBACK ATSettingsDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARA
     case WM_DESTROY: {
         //  Clean up
         HWND  hEditBox = GetDlgItem(hDlg, IDC_EDIT_SIMILAR_PROCESS_GROUPS);
-        HFONT hFont    = (HFONT)SendMessage(hEditBox, WM_GETFONT, 0, 0);
+        HFONT hFont    = (HFONT)SendMessageW(hEditBox, WM_GETFONT, 0, 0);
         if (hFont) {
             DeleteObject(hFont);
         }
-        DestroyIcon((HICON)SendMessage(hDlg, WM_GETICON, ICON_SMALL, 0));
-        DestroyIcon((HICON)SendMessage(hDlg, WM_GETICON, ICON_BIG  , 0));
+        DestroyIcon((HICON)SendMessageW(hDlg, WM_GETICON, ICON_SMALL, 0));
+        DestroyIcon((HICON)SendMessageW(hDlg, WM_GETICON, ICON_BIG  , 0));
 
         g_hSettingsWnd = nullptr;
     }
@@ -814,8 +814,8 @@ void ATSettingsInitDialog(HWND hDlg, const AltTabSettings& settings) {
     HWND     hEditBox1 = GetDlgItem(hDlg, IDC_EDIT_SIMILAR_PROCESS_GROUPS);
     HWND     hEditBox2 = GetDlgItem(hDlg, IDC_EDIT_PROCESS_EXCLUSIONS);
  
-    SendMessage(hEditBox1, WM_SETFONT     , (WPARAM)hFont    , TRUE);
-    SendMessage(hEditBox2, WM_SETFONT     , (WPARAM)hFont    , TRUE);
+    SendMessageW(hEditBox1, WM_SETFONT     , (WPARAM)hFont    , TRUE);
+    SendMessageW(hEditBox2, WM_SETFONT     , (WPARAM)hFont    , TRUE);
  
     CheckDlgButton    (hDlg, IDC_CHECK_ALT_TAB                 , settings.HKAltTabEnabled          ? BST_CHECKED : BST_UNCHECKED);
     CheckDlgButton    (hDlg, IDC_CHECK_ALT_BACKTICK            , settings.HKAltBacktickEnabled     ? BST_CHECKED : BST_UNCHECKED);

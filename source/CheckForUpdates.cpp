@@ -160,8 +160,8 @@ INT_PTR CALLBACK ATCheckForUpdatesDlgProc(HWND hDlg, UINT message, WPARAM wParam
     {
     case WM_INITDIALOG: {
         HICON hIcon = LoadIcon(g_hInstance, MAKEINTRESOURCE(IDI_ALTTAB));
-        SendMessage(hDlg, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
-        SendMessage(hDlg, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
+        SendMessageW(hDlg, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+        SendMessageW(hDlg, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
 
         // Center the dialog on the screen
         int screenWidth  = GetSystemMetrics(SM_CXSCREEN);
@@ -184,12 +184,12 @@ INT_PTR CALLBACK ATCheckForUpdatesDlgProc(HWND hDlg, UINT message, WPARAM wParam
                                   DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                   DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Lucida Console");
  
-        SendMessage(GetDlgItem(hDlg, IDC_EDIT_CFU_CHANGES          ), WM_SETFONT, (WPARAM)hFont, TRUE);
-        SendMessage(GetDlgItem(hDlg, IDC_STATIC_CFU_CURRENT_VERSION), WM_SETFONT, (WPARAM)hFont, TRUE);
-        SendMessage(GetDlgItem(hDlg, IDC_STATIC_CFU_UPDATE_VERSION ), WM_SETFONT, (WPARAM)hFont, TRUE);
-        SendMessage(GetDlgItem(hDlg, IDC_STATIC_1                  ), WM_SETFONT, (WPARAM)hFont, TRUE);
-        SendMessage(GetDlgItem(hDlg, IDC_STATIC_2                  ), WM_SETFONT, (WPARAM)hFont, TRUE);
-        SendMessage(GetDlgItem(hDlg, IDC_STATIC_3                  ), WM_SETFONT, (WPARAM)hFont, TRUE);
+        SendMessageW(GetDlgItem(hDlg, IDC_EDIT_CFU_CHANGES          ), WM_SETFONT, (WPARAM)hFont, TRUE);
+        SendMessageW(GetDlgItem(hDlg, IDC_STATIC_CFU_CURRENT_VERSION), WM_SETFONT, (WPARAM)hFont, TRUE);
+        SendMessageW(GetDlgItem(hDlg, IDC_STATIC_CFU_UPDATE_VERSION ), WM_SETFONT, (WPARAM)hFont, TRUE);
+        SendMessageW(GetDlgItem(hDlg, IDC_STATIC_1                  ), WM_SETFONT, (WPARAM)hFont, TRUE);
+        SendMessageW(GetDlgItem(hDlg, IDC_STATIC_2                  ), WM_SETFONT, (WPARAM)hFont, TRUE);
+        SendMessageW(GetDlgItem(hDlg, IDC_STATIC_3                  ), WM_SETFONT, (WPARAM)hFont, TRUE);
 
         SetDlgItemTextA(hDlg, IDC_STATIC_CFU_CURRENT_VERSION, g_UpdatesInfo.CurrentVersion.c_str());
         SetDlgItemTextA(hDlg, IDC_STATIC_CFU_UPDATE_VERSION , g_UpdatesInfo.UpdateVersion.c_str());
@@ -215,12 +215,12 @@ INT_PTR CALLBACK ATCheckForUpdatesDlgProc(HWND hDlg, UINT message, WPARAM wParam
     case WM_DESTROY:
         //  Clean up
         HWND hEditBox = GetDlgItem(hDlg, IDC_EDIT_SIMILAR_PROCESS_GROUPS);
-        HFONT hFont = (HFONT)SendMessage(hEditBox, WM_GETFONT, 0, 0);
+        HFONT hFont = (HFONT)SendMessageW(hEditBox, WM_GETFONT, 0, 0);
         if (hFont) {
             DeleteObject(hFont);
         }
-        DestroyIcon((HICON)SendMessage(hDlg, WM_GETICON, ICON_SMALL, 0));
-        DestroyIcon((HICON)SendMessage(hDlg, WM_GETICON, ICON_BIG, 0));
+        DestroyIcon((HICON)SendMessageW(hDlg, WM_GETICON, ICON_SMALL, 0));
+        DestroyIcon((HICON)SendMessageW(hDlg, WM_GETICON, ICON_BIG, 0));
         break;
     }
     return (INT_PTR)FALSE;

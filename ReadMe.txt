@@ -58,6 +58,8 @@ AltTab is an alternative application for native windows switcher.
   │ Rut at Startup            │
   │ Rut as Administrator      │
   ├───────────────────────────┤
+  │ Close All Windows         │
+  ├───────────────────────────┤
   │ Reload AltTabSettings.ini │
   │ Restart                   │
   │ Exit                      │
@@ -101,4 +103,5 @@ Credits:
 - First thanks to God
 - https://github.com/kerryland : Contributions to AltTab
 - https://www.helpndoc.com/    : Used for creating CHM help document.
+- https://icons8.com/          : Used for icons.
 - Everyone :-)
