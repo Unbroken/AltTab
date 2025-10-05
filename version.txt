@@ -1,8 +1,26 @@
-2025.1.0.0
-AltTab_2025.1.0.0_x64.7z
-2025.1.0.0 new features and bug fixes
+2025.2.0.0
+AltTab_2025.2.0.0_x64.7z
+2025.2.0.0 new features and bug fixes
 -------------------------------------
-+ Implemented 'Run as Administrator' and added in tray context menu.
++ Highlight search results in AltTab window (supports multi-word search).
++ List view enhancements:
+  > Display the selected item with gradient background color with frame 
+    rectangle around it.
+  > Display the hot track item with just frame rectangle around it.
+  > Draw a vertical line separator before process name column.
+  > Removed the dotted rectangle around the selected/focused item.
++ Show the inactive close button on the right side of the item in the list view
+  when the mouse is hovered on the item. When the mouse is hovered on the close
+  button, it is shown with an active close icon. Selected window will be closed
+  on clicking on the close button.
+  > Item will be displayed with red color when the process is being closed.
++ Added "Copy Title" and some tray menu items in context menu.
++ Show title, process info (path, description, company name & ID) in tooltip on
+  mouse hover on item in the list view.
++ Added "Close All Windows" menu item in tray.
++ Added some tray menu items in AltTab window context menu.
+- When the column header is displayed, window height is more than the required,
+  hence seeing an blank space below AltTab window bottom.
 
 
 PS

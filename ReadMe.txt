@@ -101,7 +101,8 @@ Known Issues
 Credits:
 --------
 - First thanks to God
-- https://github.com/kerryland : Contributions to AltTab
-- https://www.helpndoc.com/    : Used for creating CHM help document.
-- https://icons8.com/          : Used for icons.
+- https://github.com/tmplt/fuzzywuzzy : fuzzywuzzy
+- https://github.com/kerryland        : Contributions to AltTab
+- https://www.helpndoc.com/           : Used for creating CHM help document.
+- https://icons8.com/                 : Used for icons.
 - Everyone :-)
