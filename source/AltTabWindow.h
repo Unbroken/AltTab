@@ -8,6 +8,9 @@
 #define CLASS_NAME   L"__AltTab_WndCls__"
 #define WINDOW_NAME  L"AltTab Window"
 
+extern bool g_hAltTabIsBeingClosed; // Is AltTab window being closed
+extern HWND g_hCustomToolTip;       // Custom tool tip
+
 /*!
  * @brief Structure to hold AltTab window data
  */
@@ -117,3 +120,35 @@ void SetAltTabActiveWindow();
 bool ATMapVirtualKey(UINT uCode, wchar_t& ch);
 
 std::vector<AltTabWindowData> GetAltTabWindows();
+
+INT_PTR CALLBACK ATAboutDlgProc(HWND, UINT, WPARAM, LPARAM);
+
+void DestroyAltTabWindow(const bool activate = false);
+
+void ActivateWindow(HWND hWnd);
+
+BOOL IsHungAppWindowEx(HWND hwnd);
+
+void ShowHelpWindow();
+
+void ShowReadMeWindow();
+
+void ShowReleaseNotesWindow();
+
+std::wstring GetAppDirPath();
+
+void ATShellExecuteEx(const std::wstring& fileName);
+
+void LogLastErrorInfo();
+
+void CreateCustomToolTip();
+
+void ShowCustomToolTip(const std::wstring& tooltipText, const int duration = 3000);
+
+void ShowCustomToolTipAt(const std::wstring& tooltipText, const POINT& pt, const int duration = 3000);
+
+void CALLBACK HideCustomToolTip(HWND hWnd = nullptr, UINT uMsg = 0, UINT_PTR idEvent = 0, DWORD dwTime = 0);
+
+HBITMAP LoadPngAsHBITMAP(HINSTANCE hInst, int resID, int cx, int cy);
+
+void InitImageList();

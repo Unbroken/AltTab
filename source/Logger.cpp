@@ -1,3 +1,5 @@
+#include "PreCompile.h"
+
 #ifdef _AT_LOGGER
 #include "Logger.h"
 #include "log4cpp/Appender.hh"

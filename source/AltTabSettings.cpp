@@ -1,3 +1,4 @@
+#include "PreCompile.h"
 #include "AltTabSettings.h"
 #include "Resource.h"
 #include <windowsx.h>

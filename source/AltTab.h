@@ -22,13 +22,9 @@ LRESULT CALLBACK LLKeyboardProc(int nCode, WPARAM wp, LPARAM lp);
 
 LRESULT CALLBACK MainWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
-INT_PTR CALLBACK ATAboutDlgProc(HWND, UINT, WPARAM, LPARAM);
-
 void ShowTrayContextMenu(HWND hWnd, POINT pt);
 
 void TrayContextMenuItemHandler(HWND hWnd, HMENU hSubMenu, UINT menuItemId);
-
-void DestroyAltTabWindow(const bool activate = false);
 
 void ToggleCheckState(HMENU hMenu, UINT menuItemID);
 
@@ -49,27 +45,5 @@ bool IsRunAtStartup();
 BOOL CALLBACK EnumWindowsProcNAT(HWND hwnd, LPARAM lParam);
 
 bool IsNativeATWDisplayed();
-
-void ActivateWindow(HWND hWnd);
-
-BOOL IsHungAppWindowEx(HWND hwnd);
-
-void ShowHelpWindow();
-
-void ShowReadMeWindow();
-
-void ShowReleaseNotesWindow();
-
-std::wstring GetAppDirPath();
-
-void LogLastErrorInfo();
-
-void CreateCustomToolTip();
-
-void ShowCustomToolTip(const std::wstring& tooltipText, const int duration = 3000);
-
-void ShowCustomToolTipAt(const std::wstring& tooltipText, const POINT& pt, const int duration = 3000);
-
-void CALLBACK HideCustomToolTip(HWND hWnd = nullptr, UINT uMsg = 0, UINT_PTR idEvent = 0, DWORD dwTime = 0);
 
 void RestartAltTab();

@@ -1,4 +1,4 @@
-#include "framework.h"
+#include "PreCompile.h"
 #include "CheckForUpdates.h"
 #include <string>
 #include "Logger.h"
