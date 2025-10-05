@@ -44,6 +44,7 @@ RECT           g_rcBtnClose;
 bool           g_IsMouseOverCloseButton = false;
 bool           g_hAltTabIsBeingClosed   = false;                // Is AltTab window being closed
 HWND           g_hCustomToolTip         = nullptr;              // Custom tool tip
+bool           g_bIgnoreWM_ACTIVATE     = false;                // Ignore WM_ACTIVATE with WA_INACTIVE
 
 const int      COL_ICON_WIDTH           = 36;
 const int      COL_PROCNAME_WIDTH       = 180;
@@ -1336,9 +1337,13 @@ void ContextMenuItemHandler(HWND hWnd, HMENU /*hSubMenu*/, UINT menuItemId) {
         // not find a way to avoid this. So, turning off the timer.
         KillTimer(hWnd, TIMER_WINDOW_COUNT);
 
+        // Set flag to ignore WM_ACTIVATE message temporarily since we are going to show a message box now.
+        // So, the AltTab window should not be closed when the message box is shown.
+        g_bIgnoreWM_ACTIVATE = true;
+
         bool closeAllWindows = true;
         if (g_Settings.PromptTerminateAll) {
-            int result = MessageBoxW(
+            const int result = MessageBoxW(
                 hWnd,
                 L"Are you sure you want to close all windows?",
                 AT_PRODUCT_NAMEW L": Close All Windows",
@@ -1354,6 +1359,8 @@ void ContextMenuItemHandler(HWND hWnd, HMENU /*hSubMenu*/, UINT menuItemId) {
             SetAltTabActiveWindow();
         }
 
+        g_bIgnoreWM_ACTIVATE = false;
+
         SetTimer(hWnd, TIMER_WINDOW_COUNT, TIMER_WINDOW_COUNT_ELAPSE, nullptr);
     }
     break;
@@ -1367,7 +1374,7 @@ void ContextMenuItemHandler(HWND hWnd, HMENU /*hSubMenu*/, UINT menuItemId) {
 
         bool terminateAllWindows = true;
         if (g_Settings.PromptTerminateAll) {
-            int result = MessageBoxW(
+            int result = ATMessageBoxW(
                 hWnd,
                 L"Are you sure you want to terminate all windows?",
                 AT_PRODUCT_NAMEW L": Close All Windows",
@@ -1465,7 +1472,7 @@ void ContextMenuItemHandler(HWND hWnd, HMENU /*hSubMenu*/, UINT menuItemId) {
         AT_LOG_INFO("ID_CONTEXTMENU_EXIT");
         DestroyAltTabWindow();
         PostQuitMessage(0);
-        //int result = MessageBoxW(
+        //int result = ATMessageBoxW(
         //    hWnd,
         //    L"Are you sure you want to exit?",
         //    AT_PRODUCT_NAMEW,
@@ -1496,6 +1503,27 @@ BOOL TerminateProcessEx(DWORD pid) {
 void ATCloseWindow(const int index) {
     if (index >= 0 && index < g_AltTabWindows.size()) {
         AltTabWindowData& windowData = g_AltTabWindows[index];
+
+#ifdef _DEBUG
+        // Ignore Visual Studio IDEs in debug mode
+        if (EqualsIgnoreCase(windowData.ProcessName, L"devenv.exe")
+            || EqualsIgnoreCase(windowData.ProcessName, L"Code.exe")
+            || EqualsIgnoreCase(windowData.ProcessName, L"Outlook.exe")
+            || EqualsIgnoreCase(windowData.ProcessName, L"xplorer2_64.exe")
+            || EqualsIgnoreCase(windowData.ProcessName, L"msedge.exe")
+            || EqualsIgnoreCase(windowData.ProcessName, L"OneNote.exe")
+            || EqualsIgnoreCase(windowData.ProcessName, L"Fork.exe")
+            || EqualsIgnoreCase(windowData.ProcessName, L"ConEmu64.exe")
+            || EqualsIgnoreCase(windowData.ProcessName, L"ms-teams.exe")
+            || EqualsIgnoreCase(windowData.ProcessName, L"AltTab.exe")) {
+            AT_LOG_INFO(
+                "Ignoring: ProcessName: [%-15ls], Title:[%ls] ...",
+                windowData.ProcessName.c_str(),
+                windowData.Title.c_str());
+            return;
+        }
+#endif // _DEBUG
+
         windowData.IsBeingClosed = true;
         AT_LOG_INFO("ATCloseWindow: index: %d, hWnd: %#x, hOwner: %#x, Title: %ls", index, windowData.hWnd, windowData.hOwner, windowData.Title.c_str());
 
@@ -1909,7 +1937,8 @@ void ATW_OnTimer(HWND /*hwnd*/, UINT /*id*/) {
 
 void ATW_OnActivate(HWND /*hwnd*/, UINT state, HWND /*hwndActDeact*/, BOOL /*fMinimized*/) {
     AT_LOG_TRACE;
-    if (state == WA_INACTIVE) {
+    AT_LOG_INFO("WM_ACTIVATE: g_bIgnoreWM_ACTIVATE: %d", g_bIgnoreWM_ACTIVATE);
+    if (state == WA_INACTIVE && !g_bIgnoreWM_ACTIVATE) {
         AT_LOG_INFO("WM_ACTIVATE: The application is becoming inactive, close the window");
         // The application is becoming inactive, close the window
         DestroyAltTabWindow();
@@ -2449,4 +2478,16 @@ void InitImageList() {
         g_nImgCloseInactiveInd = ImageList_Add(g_hImageList, hBmpCloseInactive, nullptr);
         DeleteObject(hBmpCloseInactive);
     }
+}
+
+int ATMessageBoxW(HWND hWnd, LPCWSTR lpText, LPCWSTR lpCaption, UINT uType) {
+    // Set flag to ignore WM_ACTIVATE message temporarily since we are going to show a message box now.
+    // So, the AltTab window should not be closed when the message box is shown.
+    g_bIgnoreWM_ACTIVATE = true;
+
+    const int result = MessageBoxW(hWnd, lpText, lpCaption, uType);
+
+    g_bIgnoreWM_ACTIVATE = false;
+
+    return result;
 }

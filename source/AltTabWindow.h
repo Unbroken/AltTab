@@ -5,28 +5,29 @@
 #include <wtypes.h>
 #include <set>
 
-#define CLASS_NAME   L"__AltTab_WndCls__"
-#define WINDOW_NAME  L"AltTab Window"
+#define CLASS_NAME L"__AltTab_WndCls__"
+#define WINDOW_NAME L"AltTab Window"
 
 extern bool g_hAltTabIsBeingClosed; // Is AltTab window being closed
 extern HWND g_hCustomToolTip;       // Custom tool tip
+extern bool g_bIgnoreWM_ACTIVATE;   // Ignore WM_ACTIVATE with WA_INACTIVE
 
 /*!
  * @brief Structure to hold AltTab window data
  */
 struct AltTabWindowData {
-    HWND          hWnd;                  // Window handle
-    HWND          hOwner;                // Owner window handle
-    HICON         hIcon;                 // Window icon
-    std::wstring  Title;                 // Window title
-    std::wstring  ProcessName;           // Process name of the window
-    std::wstring  FullPath;              // Full path of the process
-    std::wstring  Description;           // File description of the process
-    std::wstring  CompanyName;           // Company name of the process
-    DWORD         PID;                   // Process ID
-    bool          IsConflictProcess;     // Indicates if the process is running from different paths.
-    std::wstring  Version;               // File version of the process
-    bool          IsBeingClosed;         // Indicates if the window is being closed
+    HWND hWnd;                // Window handle
+    HWND hOwner;              // Owner window handle
+    HICON hIcon;              // Window icon
+    std::wstring Title;       // Window title
+    std::wstring ProcessName; // Process name of the window
+    std::wstring FullPath;    // Full path of the process
+    std::wstring Description; // File description of the process
+    std::wstring CompanyName; // Company name of the process
+    DWORD PID;                // Process ID
+    bool IsConflictProcess;   // Indicates if the process is running from different paths.
+    std::wstring Version;     // File version of the process
+    bool IsBeingClosed;       // Indicates if the window is being closed
 
     std::set<std::pair<size_t, size_t>> TitleHighlights;
     std::set<std::pair<size_t, size_t>> ProcessNameHighlights;
@@ -69,7 +70,7 @@ struct AltTabWindowData {
 
 /*!
  * \brief Register AltTab window class
- * 
+ *
  * \return Return true if the class is registered successfully otherwise false.
  */
 bool RegisterAltTabWindow();
@@ -81,10 +82,10 @@ HWND CreateAltTabWindow();
 
 /**
  * \brief Show AltTab window
- * 
+ *
  * \param hAltTabWnd AltTab window handle
  * \param direction  Direction which tells to select next or previous item
- * \return 
+ * \return
  */
 HWND ShowAltTabWindow(HWND& hAltTabWnd, int direction);
 
@@ -99,7 +100,7 @@ void ATWListViewSelectPrevItem();
 
 void ATWListViewDeleteItem(int rowNumber);
 
-int  ATWListViewGetSelectedItem();
+int ATWListViewGetSelectedItem();
 
 void ATWListViewPageDown();
 
@@ -111,10 +112,10 @@ void SetAltTabActiveWindow();
 
 /**
  * \brief Translate the virtual key code to a character value.
- * 
+ *
  * \param[in]  uCode    The virtual key code or scan code value of the key.
  * \param[out] vkCode   Either a virtual-key code or a character value.
- * 
+ *
  * \return Return true if the given uCode is a printable character otherwise false.
  */
 bool ATMapVirtualKey(UINT uCode, wchar_t& ch);
@@ -152,3 +153,14 @@ void CALLBACK HideCustomToolTip(HWND hWnd = nullptr, UINT uMsg = 0, UINT_PTR idE
 HBITMAP LoadPngAsHBITMAP(HINSTANCE hInst, int resID, int cx, int cy);
 
 void InitImageList();
+
+/*!
+ * @brief Displays a modal dialog box containing a message and optional caption
+ * in a Windows application (wide-character version).
+ * @param hWnd Handle to the owner window of the message box.
+ * @param lpText Pointer to a null-terminated string that contains the message to be displayed.
+ * @param lpCaption Pointer to a null-terminated string that contains the caption for the message box.
+ * @param uType Specifies the contents and behavior of the message box (button types, icons, default button, etc.).
+ * @return An integer value indicating which button was pressed by the user or an error code.
+ */
+int ATMessageBoxW(HWND hWnd, LPCWSTR lpText, LPCWSTR lpCaption, UINT uType);

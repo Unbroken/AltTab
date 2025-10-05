@@ -731,30 +731,38 @@ void TrayContextMenuItemHandler(HWND hWnd, HMENU hSubMenu, UINT menuItemId) {
             return;
         }
 
-        const int result = MessageBoxW(
+        const int result = ATMessageBoxW(
             hWnd,
             L"Are you sure you want to close all windows?",
             AT_PRODUCT_NAMEW L": Close All Windows",
             MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
 
         if (result == IDYES) {
-            for (const auto& winInfo : altTabWindows) {
+            for (const auto& windowData : altTabWindows) {
 #ifdef _DEBUG
                 // Ignore Visual Studio IDEs in debug mode
-                if (EqualsIgnoreCase(winInfo.ProcessName, L"devenv.exe")
-                    || EqualsIgnoreCase(winInfo.ProcessName, L"AltTab.exe")) {
+                if (EqualsIgnoreCase(windowData.ProcessName, L"devenv.exe")
+                    || EqualsIgnoreCase(windowData.ProcessName, L"Code.exe")
+                    || EqualsIgnoreCase(windowData.ProcessName, L"Outlook.exe")
+                    || EqualsIgnoreCase(windowData.ProcessName, L"xplorer2_64.exe")
+                    || EqualsIgnoreCase(windowData.ProcessName, L"msedge.exe")
+                    || EqualsIgnoreCase(windowData.ProcessName, L"OneNote.exe")
+                    || EqualsIgnoreCase(windowData.ProcessName, L"Fork.exe")
+                    || EqualsIgnoreCase(windowData.ProcessName, L"ConEmu64.exe")
+                    || EqualsIgnoreCase(windowData.ProcessName, L"ms-teams.exe")
+                    || EqualsIgnoreCase(windowData.ProcessName, L"AltTab.exe")) {
                     AT_LOG_INFO(
                         "Ignoring: ProcessName: [%-15ls], Title:[%ls] ...",
-                        winInfo.ProcessName.c_str(),
-                        winInfo.Title.c_str());
+                        windowData.ProcessName.c_str(),
+                        windowData.Title.c_str());
                     continue;
                 }
 #endif // _DEBUG
                 AT_LOG_INFO(
                     "Closing : ProcessName: [%-15ls], Title:[%ls] ...",
-                    winInfo.ProcessName.c_str(),
-                    winInfo.Title.c_str());
-                PostMessage(winInfo.hWnd, WM_CLOSE, 0, 0);
+                    windowData.ProcessName.c_str(),
+                    windowData.Title.c_str());
+                PostMessage(windowData.hWnd, WM_CLOSE, 0, 0);
             }
         }
     } break;
