@@ -490,42 +490,44 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
                     // If the window is to be inserted, now apply the search string
                     if (insert && !g_SearchString.empty()) {
                         // Do NOT insert by default, unless a match is found if search string is not empty
-                        insert = false;
+                        insert = true;
 
                         // First search for exact match in title and process name
-                        const std::wstring searchString = ToLower(g_SearchString);
+                        // Split the search string by spaces and check if all parts are present
+                        std::vector<std::wstring> searchParts = Split(ToLower(g_SearchString));
                         const std::wstring titleLower   = ToLower(item.Title);
-                        const size_t titleIndex = titleLower.find(searchString);
-                        if (titleIndex != std::wstring::npos) {
-                            insert = true;
-                            item.TitleHighlights.insert({ titleIndex, titleIndex + searchString.size() - 1});
-                        }
-                        
-                        if (!insert) {
-                            const size_t procIndex = ToLower(item.ProcessName).find(searchString);
-                            if (procIndex != std::wstring::npos) {
-                                insert = true;
-                                item.ProcessNameHighlights.insert(
-                                    { procIndex, procIndex + searchString.size() - 1 });
-                            }
-                        }
 
-                        // Search in window title
-                        if (!insert && g_Settings.FuzzyMatchPercent != 100) {
-                            FuzzyMatchResult fuzzyMatchRatio = GetPartialRatioW(searchString, titleLower);
-                            if (fuzzyMatchRatio.score >= g_Settings.FuzzyMatchPercent) {
-                                insert = true;
-                                item.TitleHighlights.insert({ fuzzyMatchRatio.strt_pos, fuzzyMatchRatio.end_pos - 1 });
-                            }
-                        }
+                        for (const auto& part : searchParts) {
+                            size_t titleIndex = titleLower.find(part);
+                            size_t processNameIndex = ToLower(item.ProcessName).find(part);
 
-                        // Search in process name
-                        if (!insert && g_Settings.FuzzyMatchPercent != 100) {
-                            FuzzyMatchResult fuzzyMatchRatio = GetPartialRatioW(searchString, item.ProcessName);
-                            if (fuzzyMatchRatio.score >= g_Settings.FuzzyMatchPercent) {
-                                insert = true;
-                                item.ProcessNameHighlights.insert(
-                                    { fuzzyMatchRatio.strt_pos, fuzzyMatchRatio.end_pos - 1 });
+                            // Search in window title
+                            if (titleIndex != std::wstring::npos) {
+                                item.TitleHighlights.insert({ titleIndex, titleIndex + part.size() - 1 });
+                            } else if (g_Settings.FuzzyMatchPercent != 100) {
+                                FuzzyMatchResult fuzzyMatchRatio = GetPartialRatioW(part, titleLower);
+                                if (fuzzyMatchRatio.score >= g_Settings.FuzzyMatchPercent) {
+                                    item.TitleHighlights.insert(
+                                        { fuzzyMatchRatio.start_pos, fuzzyMatchRatio.end_pos - 1 });
+                                    titleIndex = fuzzyMatchRatio.start_pos;
+                                }
+                            }
+
+                            // Search in process name
+                            if (processNameIndex != std::wstring::npos) {
+                                item.ProcessNameHighlights.insert({ processNameIndex, processNameIndex + part.size() - 1 });
+                            } else if (g_Settings.FuzzyMatchPercent != 100) {
+                                FuzzyMatchResult fuzzyMatchRatio = GetPartialRatioW(part, item.ProcessName);
+                                if (fuzzyMatchRatio.score >= g_Settings.FuzzyMatchPercent) {
+                                    item.ProcessNameHighlights.insert(
+                                        { fuzzyMatchRatio.start_pos, fuzzyMatchRatio.end_pos - 1 });
+                                    processNameIndex = fuzzyMatchRatio.start_pos;
+                                }
+                            }
+
+                            if (titleIndex == std::wstring::npos && processNameIndex == std::wstring::npos) {
+                                insert = false;
+                                break;
                             }
                         }
                         //AT_LOG_INFO("matchRatio = %5.1f, title = [%s]", , WStrToUTF8(item.Title).c_str());

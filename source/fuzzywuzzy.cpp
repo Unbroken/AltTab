@@ -336,7 +336,7 @@ FuzzyMatchResult partial_ratio(const std::wstring& s1, const std::wstring& s2) {
         if (r > 0.995) {
             //return 100.0;
             result.score = 100.0;
-            result.strt_pos = long_start;
+            result.start_pos = long_start;
             result.end_pos = long_end - 1;
             return result;
         }
@@ -344,7 +344,7 @@ FuzzyMatchResult partial_ratio(const std::wstring& s1, const std::wstring& s2) {
         if (r > max || max < 0) {
             max = r;
             result.score = max * 100.0;
-            result.strt_pos = long_start;
+            result.start_pos = long_start;
             result.end_pos = long_end - 1;
         }
     }

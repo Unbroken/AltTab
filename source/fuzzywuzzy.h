@@ -4,7 +4,7 @@
 
 struct FuzzyMatchResult {
     double score;
-    int strt_pos;
+    int start_pos;
     int end_pos;
 };
 
