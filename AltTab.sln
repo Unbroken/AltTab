@@ -30,15 +30,12 @@ Global
 		{0DE0E137-9287-4521-B9FC-D5F73C426200}.ReleaseNoLogger|x86.ActiveCfg = ReleaseNoLogger|Win32
 		{0DE0E137-9287-4521-B9FC-D5F73C426200}.ReleaseNoLogger|x86.Build.0 = ReleaseNoLogger|Win32
 		{3DD528B6-F735-4784-8589-FBC4281DE67E}.Debug|x64.ActiveCfg = Debug|x64
-		{3DD528B6-F735-4784-8589-FBC4281DE67E}.Debug|x64.Build.0 = Debug|x64
 		{3DD528B6-F735-4784-8589-FBC4281DE67E}.Debug|x86.ActiveCfg = Debug|Win32
 		{3DD528B6-F735-4784-8589-FBC4281DE67E}.Debug|x86.Build.0 = Debug|Win32
 		{3DD528B6-F735-4784-8589-FBC4281DE67E}.Release|x64.ActiveCfg = Release|x64
-		{3DD528B6-F735-4784-8589-FBC4281DE67E}.Release|x64.Build.0 = Release|x64
 		{3DD528B6-F735-4784-8589-FBC4281DE67E}.Release|x86.ActiveCfg = Release|Win32
 		{3DD528B6-F735-4784-8589-FBC4281DE67E}.Release|x86.Build.0 = Release|Win32
 		{3DD528B6-F735-4784-8589-FBC4281DE67E}.ReleaseNoLogger|x64.ActiveCfg = ReleaseNoLogger|x64
-		{3DD528B6-F735-4784-8589-FBC4281DE67E}.ReleaseNoLogger|x64.Build.0 = ReleaseNoLogger|x64
 		{3DD528B6-F735-4784-8589-FBC4281DE67E}.ReleaseNoLogger|x86.ActiveCfg = Release|Win32
 		{3DD528B6-F735-4784-8589-FBC4281DE67E}.ReleaseNoLogger|x86.Build.0 = Release|Win32
 	EndGlobalSection
