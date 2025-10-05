@@ -26,7 +26,6 @@
 #include <thread>
 #include <windowsx.h>
 
-
 HWND           g_hStaticText            = nullptr;
 HWND           g_hListView              = nullptr;
 int            g_nLVHotItem             = -1;
@@ -136,10 +135,90 @@ namespace AT {
         }
     }
 
+    void DrawTextWithHighlight(
+       HDC hdc,
+       const RECT& rcSubItem,
+       const COLORREF& textColor,
+       const std::wstring& itemText,
+       const std::set<std::pair<size_t, size_t>>& highlights)
+    {
+        static const UINT format = DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS;
+
+        RECT rci = rcSubItem;
+
+        // Adjust the rect for drawing text, not to touch the borders
+        rci.top += 3, rci.bottom -= 3;
+
+        // Custom highlight logic for matching keywords
+        int xPos = rci.left; // Starting position for text
+        size_t prev = 0;
+
+        for (const auto& pr : highlights) {
+            // If the current highlight ends before the previous highlight starts
+            // then skip this highlight.
+            if (pr.second < prev)
+                continue;
+
+            // If the previous highlight ends after the current highlight starts
+            // then adjust the start index to the end of the previous highlight.
+            const size_t startInd = prev > pr.first ? prev : pr.first;
+            const size_t wordLen = pr.second - startInd + 1;
+
+            // Draw text before the match
+            SIZE beforeSize;
+            LPCWSTR beforeMatch = itemText.c_str() + prev;
+            const int beforeMatchLen = (int)(startInd - prev);
+            GetTextExtentPointW(hdc, beforeMatch, beforeMatchLen, &beforeSize);
+
+            SetTextColor(hdc, textColor);
+            DrawTextW(hdc, beforeMatch, beforeMatchLen, &rci, format);
+
+            // Move xPos forward
+            xPos += beforeSize.cx;
+            rci.left = xPos;
+
+            // Do NOT draw beyond the right edge of the column
+            if (rci.left >= rcSubItem.right)
+                break;
+
+            // Highlight the matching part
+            LPCWSTR matchText = itemText.c_str() + startInd;
+            const int matchTextLen = (int)wordLen;
+            SIZE matchSize;
+            GetTextExtentPointW(hdc, matchText, matchTextLen, &matchSize);
+            RECT matchRect = rci;
+            matchRect.right = AT_MIN(matchRect.right, matchRect.left + matchSize.cx);
+
+            HBRUSH hbr = CreateSolidBrush(RGB(255, 255, 191));
+            FillRect(hdc, &matchRect, hbr);    // Yellow background for match
+            SetTextColor(hdc, RGB(255, 0, 0)); // Red text for highlighted part
+            DrawTextW(hdc, matchText, matchTextLen, &matchRect, format);
+
+            // Move xPos forward
+            xPos += matchSize.cx;
+            rci.left = xPos;
+
+            // Do NOT draw beyond the right edge of the column
+            if (rci.left >= rcSubItem.right)
+                break;
+
+            // Update the item text to exclude the processed part
+            prev = pr.second + 1;
+        }
+
+        LPCWSTR remainingText = itemText.c_str() + prev;
+        const int remainingTextLen = (int)(itemText.size() - prev);
+        // Draw the remaining text (if any)
+        if (remainingTextLen > 0) {
+            SetTextColor(hdc, textColor);
+            DrawTextW(hdc, remainingText, remainingTextLen, &rci, format);
+        }
+    }
+
     BOOL ATListViewDrawItem(HWND hListView, LPDRAWITEMSTRUCT lpDrawItemStruct) {
-        /* */ HDC& hdc     = lpDrawItemStruct->hDC;
-        const RECT rcItem  = lpDrawItemStruct->rcItem;
-        const int rowIndex = lpDrawItemStruct->itemID;
+        /* */ HDC& hdc      = lpDrawItemStruct->hDC;
+        const RECT rcItem   = lpDrawItemStruct->rcItem;
+        const int  rowIndex = lpDrawItemStruct->itemID;
 
         if (rowIndex < 0)
             return FALSE;
@@ -167,12 +246,16 @@ namespace AT {
         }
 
         //AT_LOG_INFO("LVDrawItem: Index: %d, IsBeingClosed: %d, Title: %ls", rowIndex, pData->IsBeingClosed, pData->Title.c_str());
+        //AT_LOG_INFO("LVDrawItem: Index: %d, Title: %ls, Highlights:", rowIndex, pWindowData->Title.c_str());
+        //for (const auto& pr : pWindowData->TitleHighlights) {
+        //    AT_LOG_INFO("  - [%d, %d]", pr.first, pr.second);
+        //}
 
         // Check if the window is being closed
         // Show the item in red color to indicate the window is being closed
         if (pWindowData->IsBeingClosed) {
-            clrBk = RGB(255, 69, 54);   // Red Orange
-            clrText = RGB(0, 0, 0);   // Black
+            clrBk   = RGB(255, 69, 54);   // Red Orange
+            clrText = RGB(  0,  0,  0);   // Black
         }
 
         // Draw gradient background
@@ -188,6 +271,22 @@ namespace AT {
 
         GRADIENT_RECT gRect = { 0, 1 };
         GradientFill(hdc, vertex, 2, &gRect, 1, GRADIENT_FILL_RECT_V);
+
+        // First draw the vertical separator line between columns title and process name.
+        // Draw vertical separator line between columns, this is little dark gray. The same color 
+        // is used for the border of the AltTab window.
+        if (columns == 3) {
+            RECT rcSub;
+            ListView_GetSubItemRect(hListView, rowIndex, 2, LVIR_BOUNDS, &rcSub);
+            SetBkMode(hdc, TRANSPARENT);
+
+            HPEN hPen = CreatePen(PS_SOLID, 1, RGB(90, 90, 90));
+            HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
+            MoveToEx(hdc, rcSub.left - 1, rcSub.top, nullptr);
+            LineTo(hdc, rcSub.left - 1, rcSub.bottom + 1);
+            SelectObject(hdc, hOldPen);
+            DeleteObject(hPen);
+        }
 
         // Draw a border around the item
         if (lpDrawItemStruct->itemState & ODS_SELECTED) {
@@ -211,16 +310,18 @@ namespace AT {
             SetBkMode(hdc, TRANSPARENT);
 
             // Draw icon (first column usually)
-            if (col == 0 && lvItem.iImage >= 0) {
-                // ImageList_Draw(hImgList, lvItem.iImage, hdc, rcSub.left + 2, rcSub.top + 0, ILD_TRANSPARENT);
-                //  Calculate rect for icon
-                int rowHeight = rcSub.bottom - rcSub.top;
-                int iconSize = 32;
+            if (col == 0) {
+                if (lvItem.iImage >= 0) {
+                    //  Calculate rect for icon
+                    const int rowHeight = rcSub.bottom - rcSub.top;
+                    const int iconSize = 32;
 
-                int x = rcSub.left + 2;
-                int y = rcSub.top + (rowHeight - iconSize) / 2; // vertically centered
+                    const int x = rcSub.left + 2;
+                    const int y = rcSub.top + (rowHeight - iconSize) / 2; // vertically centered
 
-                ImageList_DrawEx(g_hLVImageList, rowIndex, hdc, x, y, iconSize, iconSize, CLR_NONE, CLR_NONE, ILD_NORMAL);
+                    ImageList_DrawEx(
+                        g_hLVImageList, rowIndex, hdc, x, y, iconSize, iconSize, CLR_NONE, CLR_NONE, ILD_NORMAL);
+                }
             } else if (col == 1) {
                 // Leave some margin at left
                 rcSub.left += 3;
@@ -229,15 +330,25 @@ namespace AT {
                 if (pWindowData->IsConflictProcess) {
                     // Just append the version to the title for conflict processes
                     const std::wstring title = pWindowData->Title + L" - [v" + pWindowData->Version + L"]";
-                    DrawText(hdc, title.c_str(), -1, &rcSub, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+                    DrawTextWithHighlight(hdc, rcSub, clrText, title, pWindowData->TitleHighlights);
                 } else {
-                    DrawText(hdc, pWindowData->Title.c_str(), -1, &rcSub, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+                    DrawTextWithHighlight(hdc, rcSub, clrText, pWindowData->Title, pWindowData->TitleHighlights);
                 }
-            } else {
-                // Leave some margin at left
-                rcSub.left += 3;
+            } else if (col == 2) {
+                //// Draw vertical separator line between columns, this is little dark gray. The same color 
+                //// is used for the border of the AltTab window.
+                //HPEN hPen = CreatePen(PS_SOLID, 1, RGB(90, 90, 90));
+                //HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
+                //MoveToEx(hdc, rcSub.left - 1, rcSub.top, nullptr);
+                //LineTo(hdc, rcSub.left - 1, rcSub.bottom);
+                //SelectObject(hdc, hOldPen);
+                //DeleteObject(hPen);
 
-                DrawText(hdc, pWindowData->ProcessName.c_str(), -1, &rcSub, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+                // Leave some margin at left
+                rcSub.left += 4;
+
+                DrawTextWithHighlight(
+                    hdc, rcSub, clrText, pWindowData->ProcessName, pWindowData->ProcessNameHighlights);
             }
         }
 
@@ -371,24 +482,46 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 
                     // If the window is to be inserted, now apply the search string
                     if (insert && !g_SearchString.empty()) {
-                        insert = InStr(item.ProcessName, g_SearchString) || InStr(item.Title, g_SearchString);
+                        // Do NOT insert by default, unless a match is found if search string is not empty
+                        insert = false;
 
-                        double matchRatio = insert ? 100 : 0;
-                        // Search in process name
-                        if (!insert && g_Settings.FuzzyMatchPercent != 100) {
-                            matchRatio = GetPartialRatioW(g_SearchString, item.ProcessName);
-                            if (matchRatio >= g_Settings.FuzzyMatchPercent) {
+                        // First search for exact match in title and process name
+                        const std::wstring searchString = ToLower(g_SearchString);
+                        const std::wstring titleLower   = ToLower(item.Title);
+                        const size_t titleIndex = titleLower.find(searchString);
+                        if (titleIndex != std::wstring::npos) {
+                            insert = true;
+                            item.TitleHighlights.insert({ titleIndex, titleIndex + searchString.size() - 1});
+                        }
+                        
+                        if (!insert) {
+                            const size_t procIndex = ToLower(item.ProcessName).find(searchString);
+                            if (procIndex != std::wstring::npos) {
                                 insert = true;
+                                item.ProcessNameHighlights.insert(
+                                    { procIndex, procIndex + searchString.size() - 1 });
                             }
                         }
+
                         // Search in window title
                         if (!insert && g_Settings.FuzzyMatchPercent != 100) {
-                            matchRatio = GetPartialRatioW(g_SearchString, item.Title);
-                            if (matchRatio >= g_Settings.FuzzyMatchPercent) {
+                            FuzzyMatchResult fuzzyMatchRatio = GetPartialRatioW(searchString, titleLower);
+                            if (fuzzyMatchRatio.score >= g_Settings.FuzzyMatchPercent) {
                                 insert = true;
+                                item.TitleHighlights.insert({ fuzzyMatchRatio.strt_pos, fuzzyMatchRatio.end_pos - 1 });
                             }
                         }
-                        //AT_LOG_INFO("matchRatio = %5.1f, title = [%s]", matchRatio, WStrToUTF8(item.Title).c_str());
+
+                        // Search in process name
+                        if (!insert && g_Settings.FuzzyMatchPercent != 100) {
+                            FuzzyMatchResult fuzzyMatchRatio = GetPartialRatioW(searchString, item.ProcessName);
+                            if (fuzzyMatchRatio.score >= g_Settings.FuzzyMatchPercent) {
+                                insert = true;
+                                item.ProcessNameHighlights.insert(
+                                    { fuzzyMatchRatio.strt_pos, fuzzyMatchRatio.end_pos - 1 });
+                            }
+                        }
+                        //AT_LOG_INFO("matchRatio = %5.1f, title = [%s]", , WStrToUTF8(item.Title).c_str());
                     }
 
                     if (insert) {
@@ -1385,14 +1518,14 @@ void ATCloseWindow(const int index) {
 
 bool ATMapVirtualKey(UINT uCode, wchar_t& vkCode) {
     wchar_t ch = static_cast<wchar_t>(uCode);
-    //AT_LOG_INFO("uCode: %c, ch: %c", uCode, ch);
+    AT_LOG_INFO("uCode: [%c], ch: [%c]", uCode, ch);
 
     if (!iswprint((wint_t)uCode)) {
         vkCode = '\0';
         return false;
     }
 
-    bool isShiftPressed = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+    const bool isShiftPressed = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
 
     // Check for alphabetic and digit keys
     if ((uCode >= 'A' && uCode <= 'Z') || (uCode >= '0' && uCode <= '9')) {
@@ -1531,7 +1664,7 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
 
     // Here adding 1 pixel to the Y position to avoid the static text control overlap with the ListView control
     if (g_Settings.ShowSearchString) {
-        Y += staticTextHeight + 1;
+        Y += staticTextHeight + (g_Settings.ShowColHeader ? 1 : 0);
     } else {
         staticTextHeight = -1;
     }
@@ -1635,10 +1768,10 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
     }
     RECT rcListView;
     GetClientRect(g_hListView, &rcListView);
-    int itemHeight =
+    const int itemHeight =
         ListView_GetItemRect(g_hListView, 0, &rcListView, LVIR_BOUNDS) ? rcListView.bottom - rcListView.top : 0;
-    int itemCount = ListView_GetItemCount(g_hListView);
-    int requiredHeight = itemHeight * itemCount + headerHeight + staticTextHeight + 3;
+    const int itemCount = ListView_GetItemCount(g_hListView);
+    int requiredHeight = itemHeight * itemCount + headerHeight + staticTextHeight + 2;
 
     if (requiredHeight <= g_Settings.WindowHeight) {
         SetWindowPos(hWnd, HWND_TOPMOST, windowX, windowY, windowWidth, requiredHeight, SWP_NOZORDER);
@@ -1648,7 +1781,7 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
         int processNameWidth = GetColProcessNameWidth();
         int colTitleWidth = g_Settings.WindowWidth - (COL_ICON_WIDTH + processNameWidth) - scrollBarWidth - 1;
         int lvHeight = (g_Settings.WindowHeight - itemHeight + 1) / itemHeight * itemHeight;
-        requiredHeight = lvHeight + headerHeight + staticTextHeight + 3;
+        requiredHeight = lvHeight + headerHeight + staticTextHeight + 2;
 
         ListView_SetColumnWidth(hListView, 1, colTitleWidth);
 
@@ -1752,10 +1885,7 @@ void ATW_OnTimer(HWND /*hwnd*/, UINT /*id*/) {
     if (!doRefresh) {
         // Deep compare the two vectors and update only if there is a change
         for (int i = 0; i < altTabWindows.size(); ++i) {
-            const auto& a = altTabWindows[i];
-            const auto& b = g_AltTabWindows[i];
-            if (a.hWnd != b.hWnd || a.hOwner != b.hOwner || a.PID != b.PID || a.Title != b.Title
-                || a.ProcessName != b.ProcessName) {
+            if (altTabWindows[i] != g_AltTabWindows[i]) {
                 doRefresh = true;
                 break;
             }
@@ -1880,20 +2010,18 @@ BOOL ATW_OnNotify(HWND /*hwnd*/, int /*idFrom*/, NMHDR* pnmhdr) {
         return TRUE;
     }
 
-    if (pnmhdr->code == NM_CLICK) {
-        // Check if the single-click event is from your ListView control
-        if (pnmhdr->hwndFrom == g_hListView) {
-            // First check if the mouse is over on close button area
-            if (g_IsMouseOverCloseButton) {
-                // Close the window of the item under mouse cursor
-                if (g_nLVHotItem != -1) {
-                    ATCloseWindow(g_nLVHotItem);
-                }
-            } else {
-                DestroyAltTabWindow(true);
+    // Check if the single-click event is from your ListView control
+    if (pnmhdr->hwndFrom == g_hListView && pnmhdr->code == NM_CLICK) {
+        // First check if the mouse is over on close button area
+        if (g_IsMouseOverCloseButton) {
+            // Close the window of the item under mouse cursor
+            if (g_nLVHotItem != -1) {
+                ATCloseWindow(g_nLVHotItem);
             }
-            return TRUE;
+        } else {
+            DestroyAltTabWindow(true);
         }
+        return TRUE;
     }
 
     return FALSE;

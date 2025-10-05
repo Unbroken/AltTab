@@ -811,6 +811,14 @@ LRESULT CALLBACK LLKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
         }
     } // if (isAltPressed || g_hAltTabWnd != nullptr)
 
+    // This is exceptional case to handle Alt + Space
+    // `PowerToys` also uses `Alt + Space` this hotkey. So, prevent this hotkey while AltTab window is open.
+    // If we do not prevent this, AltTab window will be closed and PowerToys Run window will be opened.
+    if (g_hAltTabWnd != nullptr && vkCode == 32 /* Space */) {
+         PostMessageW(g_hListView, WM_KEYDOWN, vkCode, 0);
+         return TRUE;
+    }
+
     //AT_LOG_DEBUG("CallNextHookEx(g_KeyboardHook, nCode, wParam, lParam);");
     return CallNextHookEx(g_KeyboardHook, nCode, wParam, lParam);
 }

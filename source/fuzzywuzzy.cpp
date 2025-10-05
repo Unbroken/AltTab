@@ -1,3 +1,4 @@
+#include "fuzzywuzzy.h"
 #include <string>
 #include <vector>
 #include <map>
@@ -284,7 +285,8 @@ double ratio(const std::wstring& s1, const std::wstring& s2) {
     return 100.0 * m.ratio();
 }
 
-double partial_ratio(const std::wstring& s1, const std::wstring& s2) {
+FuzzyMatchResult partial_ratio(const std::wstring& s1, const std::wstring& s2) {
+    FuzzyMatchResult result = { 0, 0, -1};
     std::wstring shorter, longer;
 
     if (s1.length() <= s2.length()) {
@@ -304,12 +306,12 @@ double partial_ratio(const std::wstring& s1, const std::wstring& s2) {
     const std::map<std::pair<int, int>, int>& blocks1 = m.GetMatchingBlocks();
 
     /* each block represents a sequence of matching characters in a string
-	* of the form (idx_1, idx_2, len)
-	* the best partial match will block align with at least one of those blocks
-	*   e.g. shorter = "abcd", longer = XXXbcdeEEE
-	*   block = (1,3,3)
-	*   best score === ratio("abcd", "Xbcd")
-	*/
+     * of the form (idx_1, idx_2, len)
+     * the best partial match will block align with at least one of those blocks
+     *   e.g. shorter = "abcd", longer = XXXbcdeEEE
+     *   block = (1,3,3)
+     *   best score === ratio("abcd", "Xbcd")
+     */
     double max = -1.0;
     int str1_idx;
     int str2_idx;
@@ -331,11 +333,20 @@ double partial_ratio(const std::wstring& s1, const std::wstring& s2) {
         double r = m2.ratio();
 
         if (r > 0.995) {
-            return 100.0;
-        } else if (r > max || max < 0) {
+            //return 100.0;
+            result.score = 100.0;
+            result.strt_pos = long_start;
+            result.end_pos = long_end - 1;
+            return result;
+        }
+        
+        if (r > max || max < 0) {
             max = r;
+            result.score = max * 100.0;
+            result.strt_pos = long_start;
+            result.end_pos = long_end - 1;
         }
     }
 
-    return max * 100.0;
+    return result;
 }

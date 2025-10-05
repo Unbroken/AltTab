@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 #include <wtypes.h>
-#include <unordered_set>
+#include <set>
 
 #define CLASS_NAME   L"__AltTab_WndCls__"
 #define WINDOW_NAME  L"AltTab Window"
@@ -24,6 +24,44 @@ struct AltTabWindowData {
     bool          IsConflictProcess;     // Indicates if the process is running from different paths.
     std::wstring  Version;               // File version of the process
     bool          IsBeingClosed;         // Indicates if the window is being closed
+
+    std::set<std::pair<size_t, size_t>> TitleHighlights;
+    std::set<std::pair<size_t, size_t>> ProcessNameHighlights;
+
+    // Compare operator
+    bool operator==(const AltTabWindowData& other) const {
+        const bool isSame = hWnd == other.hWnd && hOwner == other.hOwner && PID == other.PID && Title == other.Title
+                            && ProcessName == other.ProcessName;
+        if (!isSame) {
+            return false;
+        }
+
+        // Compare the TitleHighlights sets
+        if (TitleHighlights.size() != other.TitleHighlights.size()) {
+            return false;
+        }
+        for (const auto& highlight : TitleHighlights) {
+            if (other.TitleHighlights.find(highlight) == other.TitleHighlights.end()) {
+                return false;
+            }
+        }
+
+        // Compare the ProcessNameHighlights sets
+        if (ProcessNameHighlights.size() != other.ProcessNameHighlights.size()) {
+            return false;
+        }
+        for (const auto& highlight : ProcessNameHighlights) {
+            if (other.ProcessNameHighlights.find(highlight) == other.ProcessNameHighlights.end()) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    bool operator!=(const AltTabWindowData& other) const {
+        return !(*this == other);
+    }
 };
 
 /*!

@@ -206,21 +206,21 @@ private:
     std::string   m_Name;
 };
 
-double GetPartialRatioW(const wchar_t* s1, const wchar_t* s2) {
+FuzzyMatchResult GetPartialRatioW(const wchar_t* s1, const wchar_t* s2) {
     //ScopedTimer st;
     try {
         return partial_ratio(s1, s2);
     } catch (...) {
-        return 0.0;
+        return { 0.0, 0, -1 };
     }
 }
 
-double GetPartialRatioW(const std::wstring& s1, const std::wstring& s2) {
+FuzzyMatchResult GetPartialRatioW(const std::wstring& s1, const std::wstring& s2) {
     //ScopedTimer st;
     try {
         return partial_ratio(ToLower(s1), ToLower(s2));
     } catch (...) {
-        return 0.0;
+        return { 0.0, 0, -1 };
     }
 }
 
@@ -245,6 +245,7 @@ int GetDPIForWindow(HWND hWnd) {
     if (FAILED(x)) {                                                                                                   \
         goto LExit;                                                                                                    \
     }
+
 #define ExitWithLastError(x, s, ...)                                                                                   \
     {                                                                                                                  \
         DWORD Dutil_er = ::GetLastError();                                                                             \
@@ -254,6 +255,7 @@ int GetDPIForWindow(HWND hWnd) {
         }                                                                                                              \
         goto LExit;                                                                                                    \
     }
+
 #define ExitFunction()                                                                                                 \
     { goto LExit; }
 

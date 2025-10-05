@@ -49,7 +49,6 @@
     <None Include="log4cpp-config.properties">
       <Filter>Resource Files</Filter>
     </None>
-    <None Include="source\AltTabWindowTestApp.vcxproj" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="source\AltTab.h">
@@ -93,13 +92,13 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <Image Include="source\AltTab.ico">
+    <Image Include="source\res\AltTab.ico">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="source\close-window-active.png">
+    <Image Include="source\res\CloseWindowActive.png">
       <Filter>Resource Files</Filter>
     </Image>
-    <Image Include="source\close-window-inactive.png">
+    <Image Include="source\res\CloseWindowInactive.png">
       <Filter>Resource Files</Filter>
     </Image>
   </ItemGroup>
