@@ -1784,16 +1784,18 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
         SetWindowPos(hWnd, HWND_TOPMOST, windowX, windowY, windowWidth, requiredHeight, SWP_NOZORDER);
         WindowResizeAndPosition(hWnd, wndWidth, requiredHeight);
     } else {
-        int scrollBarWidth = GetSystemMetrics(SM_CXVSCROLL);
-        int processNameWidth = GetColProcessNameWidth();
-        int colTitleWidth = g_Settings.WindowWidth - (COL_ICON_WIDTH + processNameWidth) - scrollBarWidth - 1;
-        int lvHeight = (g_Settings.WindowHeight - itemHeight + 1) / itemHeight * itemHeight;
-        requiredHeight = lvHeight + headerHeight + staticTextHeight + 2;
+        const int scrollBarWidth       = GetSystemMetrics(SM_CXVSCROLL);
+        const int processNameWidth     = GetColProcessNameWidth();
+        const int colTitleWidth        = g_Settings.WindowWidth - (COL_ICON_WIDTH + processNameWidth) - scrollBarWidth - 2;
+        const int numberOfVisibleItems = (g_Settings.WindowHeight - itemHeight + 1) / itemHeight;
+        const int lvHeight             = numberOfVisibleItems * itemHeight + headerHeight;
+
+        requiredHeight = lvHeight + staticTextHeight + 2;
 
         ListView_SetColumnWidth(hListView, 1, colTitleWidth);
 
         // Here, reducing the window width by 1 (-1) to fit the scrollbar properly in the window.
-        SetWindowPos(hListView, nullptr, 0, 0, windowWidth - 1, lvHeight, SWP_NOMOVE | SWP_NOZORDER);
+        SetWindowPos(hListView, nullptr, 0, 0, windowWidth - 2, lvHeight, SWP_NOMOVE | SWP_NOZORDER);
         SetWindowPos(hWnd, HWND_TOPMOST, windowX, windowY, windowWidth, requiredHeight, SWP_NOZORDER);
         WindowResizeAndPosition(hWnd, wndWidth, requiredHeight);
     }
