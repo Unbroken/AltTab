@@ -1,5 +1,5 @@
 #pragma once
-#include "framework.h"
+#include "PreCompile.h"
 #include <CommCtrl.h>
 #include <memory>
 #include <vector>

@@ -1,7 +1,7 @@
 // AltTab.cpp : Defines the entry point for the application.
 //
+#include "PreCompile.h"
 
-#include "framework.h"
 #include "AltTab.h"
 #include "Logger.h"
 #include "Utils.h"
@@ -17,9 +17,6 @@
 #include <filesystem>
 #include "CheckForUpdates.h"
 #include <thread>
-
-#include <combaseapi.h>
-#include <gdiplus.h>
 
 #pragma comment(lib, "comctl32.lib")
 #pragma comment(lib, "taskschd.lib")
@@ -42,11 +39,9 @@
 HINSTANCE       g_hInstance;                                   // Current instance
 HHOOK           g_KeyboardHook;                                // Keyboard Hook
 HWND            g_hAltTabWnd           = nullptr;              // AltTab window handle
-bool            g_hAltTabIsBeingClosed = false;                // Is AltTab window being closed
 HWND            g_hFGWnd               = nullptr;              // Foreground window handle
 HWND            g_hMainWnd             = nullptr;              // AltTab main window handle
 HWND            g_hSettingsWnd         = nullptr;              // AltTab settings window handle
-HWND            g_hCustomToolTip       = nullptr;              // Custom tool tip
 UINT_PTR        g_TooltipTimerId;
 bool            g_TooltipVisible       = false;                // Is tooltip visible or not
 TOOLINFO        g_ToolInfo             = {};                   // Custom tool tip
@@ -93,66 +88,6 @@ namespace {
             result = RegDeleteValue(hKey, AT_PRODUCT_NAMEW);
         }
         RegCloseKey(hKey);
-    }
-
-    HBITMAP LoadPngAsHBITMAP(HINSTANCE hInst, int resID, int cx, int cy) {
-        // Load PNG from resource
-        HRSRC hRes = FindResource(hInst, MAKEINTRESOURCE(resID), RT_RCDATA);
-        if (!hRes)
-            return NULL;
-        DWORD imageSize = SizeofResource(hInst, hRes);
-        HGLOBAL hMem = LoadResource(hInst, hRes);
-        if (!hMem)
-            return NULL;
-        void* pImageData = LockResource(hMem);
-
-        HGLOBAL hBuffer = GlobalAlloc(GMEM_MOVEABLE, imageSize);
-        void* pBuffer = GlobalLock(hBuffer);
-        memcpy(pBuffer, pImageData, imageSize);
-        GlobalUnlock(hBuffer);
-
-        IStream* pStream = nullptr;
-        CreateStreamOnHGlobal(hBuffer, TRUE, &pStream);
-
-        Gdiplus::Bitmap* bmp = Gdiplus::Bitmap::FromStream(pStream);
-        pStream->Release();
-
-        if (!bmp || bmp->GetLastStatus() != Gdiplus::Ok)
-            return NULL;
-
-        // Scale if needed
-        Gdiplus::Bitmap* scaled = new Gdiplus::Bitmap(cx, cy, PixelFormat32bppARGB);
-        Gdiplus::Graphics g(scaled);
-        g.DrawImage(bmp, 0, 0, cx, cy);
-        delete bmp;
-
-        HBITMAP hBmp = NULL;
-        scaled->GetHBITMAP(Gdiplus::Color(0, 0, 0, 0), &hBmp);
-        delete scaled;
-
-        return hBmp;
-    }
-
-    void InitImageList() {
-        const int imageSize = 32;
-        g_hImageList = ImageList_Create(imageSize, imageSize, ILC_COLOR32 | ILC_MASK, 1, 1);
-        if (!g_hImageList) {
-            AT_LOG_ERROR("Failed to create image list.");
-            return;
-        }
-
-        // Load images into the image list
-        HBITMAP hBmpCloseActive = LoadPngAsHBITMAP(g_hInstance, IDB_PNG_CLOSE_WINDOW_ACTIVE, imageSize, imageSize);
-        if (hBmpCloseActive) {
-            g_nImgCloseActiveInd = ImageList_Add(g_hImageList, hBmpCloseActive, nullptr);
-            DeleteObject(hBmpCloseActive);
-        }
-
-        HBITMAP hBmpCloseInactive = LoadPngAsHBITMAP(g_hInstance, IDB_PNG_CLOSE_WINDOW_INACTIVE, imageSize, imageSize);
-        if (hBmpCloseInactive) {
-            g_nImgCloseInactiveInd = ImageList_Add(g_hImageList, hBmpCloseInactive, nullptr);
-            DeleteObject(hBmpCloseInactive);
-        }
     }
 }
 
@@ -446,191 +381,6 @@ BOOL AddNotificationIcon(HWND hWndTrayIcon) {
 }
 
 // ----------------------------------------------------------------------------
-// Message handler for about box.
-// ----------------------------------------------------------------------------
-INT_PTR CALLBACK ATAboutDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
-    UNREFERENCED_PARAMETER(lParam);
-    switch (message)
-    {
-    case WM_INITDIALOG: {
-        HICON hIcon = LoadIcon(g_hInstance, MAKEINTRESOURCE(IDI_ALTTAB));
-        SendMessageW(hDlg, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
-        SendMessageW(hDlg, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
-
-        // Center the dialog on the screen
-        int screenWidth  = GetSystemMetrics(SM_CXSCREEN);
-        int screenHeight = GetSystemMetrics(SM_CYSCREEN);
-        RECT dlgRect;
-        GetWindowRect(hDlg, &dlgRect);
-
-        int dlgWidth  = dlgRect.right - dlgRect.left;
-        int dlgHeight = dlgRect.bottom - dlgRect.top;
-
-        int posX = (screenWidth  - dlgWidth ) / 2;
-        int posY = (screenHeight - dlgHeight) / 2;
-
-        SetWindowPos(hDlg, HWND_TOP, posX, posY, 0, 0, SWP_NOSIZE);
-        // Set the dialog as an app window, otherwise not displayed in task bar
-        SetWindowLong(hDlg, GWL_EXSTYLE, GetWindowLong(hDlg, GWL_EXSTYLE) | WS_EX_APPWINDOW);
-
-        std::wstring productInfo = std::format(L"<a href=\"{}\">{}</a> v{}", AT_PRODUCT_PAGE, AT_PRODUCT_NAMEW, AT_VERSION_TEXTW);
-        std::wstring copyright   = std::format(L"Copyright © {} <a href=\"{}\">{}</a>", AT_PRODUCT_YEARW, AT_PRODUCT_PAGE, AT_AUTHOR_NAME);
-
-        SetDlgItemTextW(hDlg, IDC_SYSLINK_ABOUT_PRODUCT_NAME, productInfo.c_str());
-        SetDlgItemTextW(hDlg, IDC_SYSLINK_ABOUT_COPYRIGHT   , copyright.c_str());
-    }
-    return (INT_PTR)TRUE;
-
-    case WM_COMMAND:
-        if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL)
-        {
-            EndDialog(hDlg, LOWORD(wParam));
-            return (INT_PTR)TRUE;
-        }
-        break;
-
-    case WM_NOTIFY:
-        if (wParam == IDC_SYSLINK_ABOUT_PRODUCT_NAME) {
-            NMHDR* pnmh = (NMHDR*)lParam;
-            if (pnmh->code == NM_CLICK) {
-                ShellExecute(nullptr, L"open", AT_PRODUCT_PAGE, nullptr, nullptr, SW_SHOWNORMAL);
-            }
-        } else if (wParam == IDC_SYSLINK_ABOUT_COPYRIGHT) {
-            NMHDR* pnmh = (NMHDR*)lParam;
-            if (pnmh->code == NM_CLICK) {
-                ShellExecute(nullptr, L"open", AT_AUTHOR_PAGE, nullptr, nullptr, SW_SHOWNORMAL);
-            }
-        }
-        break;
-
-    case WM_DESTROY:
-        DestroyIcon((HICON)SendMessageW(hDlg, WM_GETICON, ICON_SMALL, 0));
-        DestroyIcon((HICON)SendMessageW(hDlg, WM_GETICON, ICON_BIG, 0));
-        break;
-    }
-    return (INT_PTR)FALSE;
-}
-
-// ----------------------------------------------------------------------------
-// Activate window of the given window handle
-// ----------------------------------------------------------------------------
-void ActivateWindow(HWND hTargetWnd) {
-    AT_LOG_TRACE;
-
-	 HWND hForegroundWnd = GetForegroundWindow();
-    if (hTargetWnd == hForegroundWnd) {
-        return;
-    }
-
-    // Bring the window to the foreground
-    // Determines whether the specified window is minimized (iconic).
-    if (IsIconic(hTargetWnd)) {
-        //ShowWindow(hWnd, SW_RESTORE);
-        PostMessage(hTargetWnd, WM_SYSCOMMAND, SC_RESTORE, 0);
-    } else {
-        BOOL result = SetForegroundWindow(hTargetWnd);
-        if (!result && hForegroundWnd != hTargetWnd) {
-            // Failed to bring an elevated window to the top from a non-elevated process.
-            AT_LOG_ERROR("SetForegroundWindow(hWnd) failed!");
-
-            ShowWindow(hTargetWnd, SW_SHOW);
-            result = BringWindowToTop(hTargetWnd);
-            HWND hFGWnd = GetForegroundWindow();
-            if (!result && hFGWnd != hTargetWnd) {
-                AT_LOG_ERROR("BringWindowToTop(hWnd) failed!");
-            } else {
-                SetActiveWindow(hTargetWnd);
-                AT_LOG_INFO("BringWindowToTop(hWnd) succeeded!");
-                //return;
-            }
-
-            // It seems it is always better to use AttachThreadInput than 
-            // SetForegroundWindow even the BringWindowToTop succeeded. So not
-            // going to comment the below piece of code.
-            DWORD idForeground = GetWindowThreadProcessId(hForegroundWnd, nullptr);
-            DWORD idTarget     = GetWindowThreadProcessId(hTargetWnd    , nullptr);
-
-            if (hFGWnd && !IsHungAppWindowEx(hFGWnd))
-                AttachThreadInput(idForeground, idTarget, TRUE);
-            
-            if (!SetForegroundWindow(hTargetWnd)) {
-                INPUT inp[4];
-                ZeroMemory(&inp, sizeof(inp));
-                inp[0].type       = inp[1].type       = inp[2].type   = inp[3].type   = INPUT_KEYBOARD;
-                inp[0].ki.wVk     = inp[1].ki.wVk     = inp[2].ki.wVk = inp[3].ki.wVk = VK_MENU;
-                inp[0].ki.dwFlags = inp[2].ki.dwFlags = KEYEVENTF_EXTENDEDKEY;
-                inp[1].ki.dwFlags = inp[3].ki.dwFlags = KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP;
-                SendInput(4, inp, sizeof(INPUT));
-
-                SetForegroundWindow(hTargetWnd);
-            }
-
-            if (hFGWnd && !IsHungAppWindowEx(hFGWnd))
-                AttachThreadInput(idForeground, idTarget, FALSE);
-        }
-    }
-    SetActiveWindow(hTargetWnd);
-}
-
-/**
- * \brief Destroy AltTab Window and do necessary cleanup here
- * 
- * \param activate   Input parameter to activate the selected window or not
- */
-void DestroyAltTabWindow(const bool activate) {
-    if (g_hAltTabWnd == nullptr || g_hAltTabIsBeingClosed) {
-        return;
-    }
-
-    AT_LOG_INFO("DestroyAltTabWindow: activate = %d", activate);
-
-    // Set flag to true to avoid re-entry from WM_ACTIVATEAPP
-    g_hAltTabIsBeingClosed = true;
-
-    // Hide custom tooltip
-    HideCustomToolTip();
-
-    // Kill timer
-    KillTimer(g_hMainWnd, TIMER_CHECK_ALT_KEYUP);
-
-    if (g_idThreadAttachTo) {
-        AttachThreadInput(GetCurrentThreadId(), g_idThreadAttachTo, FALSE);
-        g_idThreadAttachTo = 0;
-    }
-
-    if (activate) {
-        int selectedInd = ATWListViewGetSelectedItem();
-        HWND hWnd = nullptr;
-        if (selectedInd != -1) {
-            hWnd = g_AltTabWindows[selectedInd].hWnd;
-            AT_LOG_INFO("hWnd = [%#x], title = [%s]", hWnd, GetWindowTitleExA(hWnd).c_str());
-        }
-        DestroyWindow(g_hAltTabWnd);
-        PostMessage(g_hAltTabWnd, WM_CLOSE, 0, 0);
-        if (hWnd && !IsHungAppWindowEx(hWnd)) {
-            ActivateWindow(hWnd);
-        }
-    } else {
-        DestroyWindow(g_hAltTabWnd);
-    }
-    
-    // CleanUp
-    g_hAltTabWnd             = nullptr;
-    g_IsAltTab               = false;
-    g_IsAltCtrlTab           = false;
-    g_IsAltBacktick          = false;
-    g_SelectedIndex          = -1;
-    g_nLVHotItem             = -1;
-    g_MouseHoverIndex        = -1;
-    g_IsMouseOverCloseButton = false;
-
-    g_AltTabWindows.clear();
-    g_SearchString .clear();
-    g_AltBacktickWndInfo     = {};
-    g_hAltTabIsBeingClosed   = false;
-}
-
-// ----------------------------------------------------------------------------
 // Low level keyboard procedure
 // 
 // If nCode is less than zero:
@@ -811,6 +561,14 @@ LRESULT CALLBACK LLKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
         }
     } // if (isAltPressed || g_hAltTabWnd != nullptr)
 
+    // This is exceptional case to handle Alt + Space
+    // `PowerToys` also uses `Alt + Space` this hotkey. So, prevent this hotkey while AltTab window is open.
+    // If we do not prevent this, AltTab window will be closed and PowerToys Run window will be opened.
+    if (g_hAltTabWnd != nullptr && vkCode == 32 /* Space */) {
+         PostMessageW(g_hListView, WM_KEYDOWN, vkCode, 0);
+         return TRUE;
+    }
+
     //AT_LOG_DEBUG("CallNextHookEx(g_KeyboardHook, nCode, wParam, lParam);");
     return CallNextHookEx(g_KeyboardHook, nCode, wParam, lParam);
 }
@@ -973,30 +731,38 @@ void TrayContextMenuItemHandler(HWND hWnd, HMENU hSubMenu, UINT menuItemId) {
             return;
         }
 
-        const int result = MessageBoxW(
+        const int result = ATMessageBoxW(
             hWnd,
             L"Are you sure you want to close all windows?",
             AT_PRODUCT_NAMEW L": Close All Windows",
             MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
 
         if (result == IDYES) {
-            for (const auto& winInfo : altTabWindows) {
+            for (const auto& windowData : altTabWindows) {
 #ifdef _DEBUG
                 // Ignore Visual Studio IDEs in debug mode
-                if (EqualsIgnoreCase(winInfo.ProcessName, L"devenv.exe")
-                    || EqualsIgnoreCase(winInfo.ProcessName, L"AltTab.exe")) {
+                if (EqualsIgnoreCase(windowData.ProcessName, L"devenv.exe")
+                    || EqualsIgnoreCase(windowData.ProcessName, L"Code.exe")
+                    || EqualsIgnoreCase(windowData.ProcessName, L"Outlook.exe")
+                    || EqualsIgnoreCase(windowData.ProcessName, L"xplorer2_64.exe")
+                    || EqualsIgnoreCase(windowData.ProcessName, L"msedge.exe")
+                    || EqualsIgnoreCase(windowData.ProcessName, L"OneNote.exe")
+                    || EqualsIgnoreCase(windowData.ProcessName, L"Fork.exe")
+                    || EqualsIgnoreCase(windowData.ProcessName, L"ConEmu64.exe")
+                    || EqualsIgnoreCase(windowData.ProcessName, L"ms-teams.exe")
+                    || EqualsIgnoreCase(windowData.ProcessName, L"AltTab.exe")) {
                     AT_LOG_INFO(
                         "Ignoring: ProcessName: [%-15ls], Title:[%ls] ...",
-                        winInfo.ProcessName.c_str(),
-                        winInfo.Title.c_str());
+                        windowData.ProcessName.c_str(),
+                        windowData.Title.c_str());
                     continue;
                 }
 #endif // _DEBUG
                 AT_LOG_INFO(
                     "Closing : ProcessName: [%-15ls], Title:[%ls] ...",
-                    winInfo.ProcessName.c_str(),
-                    winInfo.Title.c_str());
-                PostMessage(winInfo.hWnd, WM_CLOSE, 0, 0);
+                    windowData.ProcessName.c_str(),
+                    windowData.Title.c_str());
+                PostMessage(windowData.hWnd, WM_CLOSE, 0, 0);
             }
         }
     } break;
@@ -1293,128 +1059,6 @@ bool IsNativeATWDisplayed() {
     return EqualsIgnoreCase(className, "TaskSwitcherWnd") || EqualsIgnoreCase(className, "MultitaskingViewFrame");
 }
 
-BOOL IsHungAppWindowEx(HWND hwnd) {
-    if (g_pfnIsHungAppWindow && g_pfnIsHungAppWindow(hwnd)) {
-        std::string title = GetWindowTitleExA(hwnd);
-        AT_LOG_INFO("IsHungWnd: [%s]", title.c_str());
-        return (TRUE);
-    }
-
-    LRESULT lResult = SendMessageTimeoutW(hwnd, WM_NULL, 0, 0, SMTO_ABORTIFHUNG, 249, nullptr);
-    if (lResult)
-        return (FALSE);
-
-    DWORD dwErr = GetLastError();
-    return (dwErr == 0 || dwErr == 1460);
-}
-
-/*!
- * Open the file with the default associated program
- * 
- * \param fileName   File name
- */
-void ShellExecuteEx(const std::wstring& fileName) {
-    std::filesystem::path filePath = GetAppDirPath();
-    filePath.append(fileName);
-
-    // Use ShellExecute to open the file with the default associated program
-    HINSTANCE hInstance = ShellExecuteW(nullptr, L"open", filePath.wstring().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-
-    if ((INT_PTR)hInstance > 32) {
-        // ShellExecute returns a value greater than 32 if successful
-        AT_LOG_INFO("File opened successfully!");
-    } else {
-        // Otherwise, it indicates an error
-        AT_LOG_ERROR("Failed to open file!");
-        LogLastErrorInfo();
-    }
-}
-
-void ShowHelpWindow() {
-    ShellExecuteEx(L"AltTab.chm");
-}
-
-void ShowReadMeWindow() {
-    ShellExecuteEx(L"ReadMe.txt");
-}
-
-void ShowReleaseNotesWindow() {
-    ShellExecuteEx(L"ReleaseNotes.txt");
-}
-
-std::wstring GetAppDirPath() {
-    wchar_t szPath[MAX_PATH] = { 0 };
-    GetModuleFileNameW(g_hInstance, szPath, MAX_PATH);
-    std::filesystem::path dirPath = szPath;
-    return dirPath.parent_path().wstring();
-}
-
-void LogLastErrorInfo() {
-    // Get the last error code
-    const DWORD errorCode = GetLastError();
-
-    // Get the error message
-    LPVOID errorMessage;
-    FormatMessageW(
-        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
-        nullptr,
-        errorCode,
-        0,
-        reinterpret_cast<LPWSTR>(&errorMessage),
-        0,
-        nullptr);
-    std::wstring ret = (errorMessage ? reinterpret_cast<LPCWSTR>(errorMessage) : L"");
-    AT_LOG_ERROR("  Error Code   : %d", errorCode);
-    AT_LOG_ERROR("  Error Message: %s", WStrToUTF8(ret).c_str());
-}
-
-// Function to create and show a custom tooltip at the mouse location
-void CreateCustomToolTip() {
-    AT_LOG_TRACE;
-    // Create a tooltip window
-    g_hCustomToolTip = CreateWindowExW(
-        WS_EX_TOPMOST,
-        TOOLTIPS_CLASSW,
-        nullptr,
-        TTS_NOPREFIX | TTS_ALWAYSTIP,
-        0,
-        0,
-        0,
-        0,
-        nullptr,
-        nullptr,
-        g_hInstance,
-        nullptr);
-
-    if (!g_hCustomToolTip) {
-        AT_LOG_ERROR("Failed to create tooltip window.");
-        LogLastErrorInfo();
-        return;
-    }
-
-	 // Initialize members of the toolinfo structure
-    g_ToolInfo.cbSize      = sizeof(TOOLINFO);
-    g_ToolInfo.uFlags      = TTF_TRACK;
-    g_ToolInfo.hwnd        = nullptr;
-    g_ToolInfo.hinst       = nullptr;
-    g_ToolInfo.uId         = 0;
-    g_ToolInfo.lpszText    = (LPWSTR)L"Creating tooltip...";
-
-    // ToolTip control will cover the whole window
-    g_ToolInfo.rect.left   = 0;
-    g_ToolInfo.rect.top    = 0;
-    g_ToolInfo.rect.right  = 0;
-    g_ToolInfo.rect.bottom = 0;
-
-	 // Send an add tool message to the tooltip control window
-    SendMessageW(g_hCustomToolTip, TTM_ADDTOOL, 0, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
-
-    // Enable multiple lines
-    SendMessageW(g_hCustomToolTip, TTM_SETMAXTIPWIDTH, 0, MAXINT);
-
-    SendMessageW(g_hCustomToolTip, TTM_SETTIPBKCOLOR, RGB(255, 255, 0), 0);
-}
-
 DWORD WINAPI ShowCustomToolTipThread(LPVOID pvParam) {
     AT_LOG_TRACE;
 
@@ -1435,52 +1079,6 @@ DWORD WINAPI ShowCustomToolTipThread(LPVOID pvParam) {
         g_TooltipTimerId = SetTimer(nullptr, TIMER_CUSTOM_TOOLTIP, duration, HideCustomToolTip);
     }
     return 0;
-}
-
-void ShowCustomToolTip(const std::wstring& tooltipText, const int duration /*= 3000*/) {
-    AT_LOG_TRACE;
-#if 0
-    // TODO: Still this is not working properly so going with alternative
-    ToolTipInfo* tti = new ToolTipInfo { tooltipText, duration };
-    //std::thread tooltipThread(ShowCustomToolTipThread, (LPVOID)&tti);
-    //tooltipThread.detach();
-    CreateThread(nullptr, 0, ShowCustomToolTipThread, (LPVOID)tti, 0, nullptr);
-#else
-    if (!g_TooltipVisible) {
-       // Get mouse coordinates
-       POINT pt;
-       GetCursorPos(&pt);
-
-       // Slight offset to avoid covering the mouse pointer
-       g_ToolInfo.lpszText = (LPWSTR)(LPCWSTR)tooltipText.c_str();
-       SendMessageW(g_hCustomToolTip, TTM_SETTOOLINFO,      0, (LPARAM)&g_ToolInfo);
-       SendMessageW(g_hCustomToolTip, TTM_TRACKPOSITION,    0, (LPARAM)(DWORD)MAKELONG(pt.x + 12, pt.y + 12));
-       SendMessageW(g_hCustomToolTip, TTM_TRACKACTIVATE, true, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
-   
-       g_TooltipTimerId = SetTimer(nullptr, TIMER_CUSTOM_TOOLTIP, duration, HideCustomToolTip);
-       g_TooltipVisible = true;
-    }
-#endif // 0
-}
-
-void ShowCustomToolTipAt(const std::wstring& tooltipText, const POINT& pt, const int duration /*= 3000*/) {
-    AT_LOG_TRACE;
-    if (!g_TooltipVisible) {
-        g_ToolInfo.lpszText = (LPWSTR)(LPCWSTR)tooltipText.c_str();
-        SendMessageW(g_hCustomToolTip, TTM_SETTOOLINFO  ,    0, (LPARAM)&g_ToolInfo);
-        SendMessageW(g_hCustomToolTip, TTM_TRACKPOSITION,    0, (LPARAM)(DWORD)MAKELONG(pt.x, pt.y));
-        SendMessageW(g_hCustomToolTip, TTM_TRACKACTIVATE, true, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
-
-        g_TooltipTimerId = SetTimer(nullptr, TIMER_CUSTOM_TOOLTIP, duration, HideCustomToolTip);
-        g_TooltipVisible = true;
-    }
-}
-
-void CALLBACK HideCustomToolTip(HWND /*hWnd*/, UINT /*uMsg*/, UINT_PTR /*idEvent*/, DWORD /*dwTime*/) {
-    AT_LOG_TRACE;
-    KillTimer(nullptr, g_TooltipTimerId);
-    SendMessageW(g_hCustomToolTip, TTM_TRACKACTIVATE, false, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
-    g_TooltipVisible = false;
 }
 
 void RestartAltTab() {

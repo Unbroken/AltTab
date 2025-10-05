@@ -1,3 +1,4 @@
+#include "PreCompile.h"
 #include "GlobalData.h"
 
 // clang-format off

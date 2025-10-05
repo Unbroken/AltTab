@@ -1,7 +1,7 @@
 // AltTabWindow.cpp : Defines the entry point for the application.
 //
 
-#include "framework.h"
+#include "PreCompile.h"
 #include "version.h"
 #include "AltTabWindow.h"
 
@@ -25,8 +25,12 @@
 #include "CheckForUpdates.h"
 #include <thread>
 #include <windowsx.h>
+#include <shellapi.h>
+#include <gdiplus.h>
 
-
+// ----------------------------------------------------------------------------
+// Global Variables:
+// ----------------------------------------------------------------------------
 HWND           g_hStaticText            = nullptr;
 HWND           g_hListView              = nullptr;
 int            g_nLVHotItem             = -1;
@@ -38,6 +42,9 @@ HANDLE         g_hAltTabThread          = nullptr;
 std::wstring   g_SearchString;
 RECT           g_rcBtnClose;
 bool           g_IsMouseOverCloseButton = false;
+bool           g_hAltTabIsBeingClosed   = false;                // Is AltTab window being closed
+HWND           g_hCustomToolTip         = nullptr;              // Custom tool tip
+bool           g_bIgnoreWM_ACTIVATE     = false;                // Ignore WM_ACTIVATE with WA_INACTIVE
 
 const int      COL_ICON_WIDTH           = 36;
 const int      COL_PROCNAME_WIDTH       = 180;
@@ -136,10 +143,90 @@ namespace AT {
         }
     }
 
+    void DrawTextWithHighlight(
+       HDC hdc,
+       const RECT& rcSubItem,
+       const COLORREF& textColor,
+       const std::wstring& itemText,
+       const std::set<std::pair<size_t, size_t>>& highlights)
+    {
+        static const UINT format = DT_LEFT | DT_SINGLELINE | DT_VCENTER | DT_END_ELLIPSIS;
+
+        RECT rci = rcSubItem;
+
+        // Adjust the rect for drawing text, not to touch the borders
+        rci.top += 3, rci.bottom -= 3;
+
+        // Custom highlight logic for matching keywords
+        int xPos = rci.left; // Starting position for text
+        size_t prev = 0;
+
+        for (const auto& pr : highlights) {
+            // If the current highlight ends before the previous highlight starts
+            // then skip this highlight.
+            if (pr.second < prev)
+                continue;
+
+            // If the previous highlight ends after the current highlight starts
+            // then adjust the start index to the end of the previous highlight.
+            const size_t startInd = prev > pr.first ? prev : pr.first;
+            const size_t wordLen = pr.second - startInd + 1;
+
+            // Draw text before the match
+            SIZE beforeSize;
+            LPCWSTR beforeMatch = itemText.c_str() + prev;
+            const int beforeMatchLen = (int)(startInd - prev);
+            GetTextExtentPointW(hdc, beforeMatch, beforeMatchLen, &beforeSize);
+
+            SetTextColor(hdc, textColor);
+            DrawTextW(hdc, beforeMatch, beforeMatchLen, &rci, format);
+
+            // Move xPos forward
+            xPos += beforeSize.cx;
+            rci.left = xPos;
+
+            // Do NOT draw beyond the right edge of the column
+            if (rci.left >= rcSubItem.right)
+                break;
+
+            // Highlight the matching part
+            LPCWSTR matchText = itemText.c_str() + startInd;
+            const int matchTextLen = (int)wordLen;
+            SIZE matchSize;
+            GetTextExtentPointW(hdc, matchText, matchTextLen, &matchSize);
+            RECT matchRect = rci;
+            matchRect.right = AT_MIN(matchRect.right, matchRect.left + matchSize.cx);
+
+            HBRUSH hbr = CreateSolidBrush(RGB(255, 255, 191));
+            FillRect(hdc, &matchRect, hbr);    // Yellow background for match
+            SetTextColor(hdc, RGB(255, 0, 0)); // Red text for highlighted part
+            DrawTextW(hdc, matchText, matchTextLen, &matchRect, format);
+
+            // Move xPos forward
+            xPos += matchSize.cx;
+            rci.left = xPos;
+
+            // Do NOT draw beyond the right edge of the column
+            if (rci.left >= rcSubItem.right)
+                break;
+
+            // Update the item text to exclude the processed part
+            prev = pr.second + 1;
+        }
+
+        LPCWSTR remainingText = itemText.c_str() + prev;
+        const int remainingTextLen = (int)(itemText.size() - prev);
+        // Draw the remaining text (if any)
+        if (remainingTextLen > 0) {
+            SetTextColor(hdc, textColor);
+            DrawTextW(hdc, remainingText, remainingTextLen, &rci, format);
+        }
+    }
+
     BOOL ATListViewDrawItem(HWND hListView, LPDRAWITEMSTRUCT lpDrawItemStruct) {
-        /* */ HDC& hdc     = lpDrawItemStruct->hDC;
-        const RECT rcItem  = lpDrawItemStruct->rcItem;
-        const int rowIndex = lpDrawItemStruct->itemID;
+        /* */ HDC& hdc      = lpDrawItemStruct->hDC;
+        const RECT rcItem   = lpDrawItemStruct->rcItem;
+        const int  rowIndex = lpDrawItemStruct->itemID;
 
         if (rowIndex < 0)
             return FALSE;
@@ -167,12 +254,16 @@ namespace AT {
         }
 
         //AT_LOG_INFO("LVDrawItem: Index: %d, IsBeingClosed: %d, Title: %ls", rowIndex, pData->IsBeingClosed, pData->Title.c_str());
+        //AT_LOG_INFO("LVDrawItem: Index: %d, Title: %ls, Highlights:", rowIndex, pWindowData->Title.c_str());
+        //for (const auto& pr : pWindowData->TitleHighlights) {
+        //    AT_LOG_INFO("  - [%d, %d]", pr.first, pr.second);
+        //}
 
         // Check if the window is being closed
         // Show the item in red color to indicate the window is being closed
         if (pWindowData->IsBeingClosed) {
-            clrBk = RGB(255, 69, 54);   // Red Orange
-            clrText = RGB(0, 0, 0);   // Black
+            clrBk   = RGB(255, 69, 54);   // Red Orange
+            clrText = RGB(  0,  0,  0);   // Black
         }
 
         // Draw gradient background
@@ -188,6 +279,22 @@ namespace AT {
 
         GRADIENT_RECT gRect = { 0, 1 };
         GradientFill(hdc, vertex, 2, &gRect, 1, GRADIENT_FILL_RECT_V);
+
+        // First draw the vertical separator line between columns title and process name.
+        // Draw vertical separator line between columns, this is little dark gray. The same color 
+        // is used for the border of the AltTab window.
+        if (columns == 3) {
+            RECT rcSub;
+            ListView_GetSubItemRect(hListView, rowIndex, 2, LVIR_BOUNDS, &rcSub);
+            SetBkMode(hdc, TRANSPARENT);
+
+            HPEN hPen = CreatePen(PS_SOLID, 1, RGB(90, 90, 90));
+            HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
+            MoveToEx(hdc, rcSub.left - 1, rcSub.top, nullptr);
+            LineTo(hdc, rcSub.left - 1, rcSub.bottom + 1);
+            SelectObject(hdc, hOldPen);
+            DeleteObject(hPen);
+        }
 
         // Draw a border around the item
         if (lpDrawItemStruct->itemState & ODS_SELECTED) {
@@ -211,16 +318,18 @@ namespace AT {
             SetBkMode(hdc, TRANSPARENT);
 
             // Draw icon (first column usually)
-            if (col == 0 && lvItem.iImage >= 0) {
-                // ImageList_Draw(hImgList, lvItem.iImage, hdc, rcSub.left + 2, rcSub.top + 0, ILD_TRANSPARENT);
-                //  Calculate rect for icon
-                int rowHeight = rcSub.bottom - rcSub.top;
-                int iconSize = 32;
+            if (col == 0) {
+                if (lvItem.iImage >= 0) {
+                    //  Calculate rect for icon
+                    const int rowHeight = rcSub.bottom - rcSub.top;
+                    const int iconSize = 32;
 
-                int x = rcSub.left + 2;
-                int y = rcSub.top + (rowHeight - iconSize) / 2; // vertically centered
+                    const int x = rcSub.left + 2;
+                    const int y = rcSub.top + (rowHeight - iconSize) / 2; // vertically centered
 
-                ImageList_DrawEx(g_hLVImageList, rowIndex, hdc, x, y, iconSize, iconSize, CLR_NONE, CLR_NONE, ILD_NORMAL);
+                    ImageList_DrawEx(
+                        g_hLVImageList, rowIndex, hdc, x, y, iconSize, iconSize, CLR_NONE, CLR_NONE, ILD_NORMAL);
+                }
             } else if (col == 1) {
                 // Leave some margin at left
                 rcSub.left += 3;
@@ -229,15 +338,25 @@ namespace AT {
                 if (pWindowData->IsConflictProcess) {
                     // Just append the version to the title for conflict processes
                     const std::wstring title = pWindowData->Title + L" - [v" + pWindowData->Version + L"]";
-                    DrawText(hdc, title.c_str(), -1, &rcSub, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+                    DrawTextWithHighlight(hdc, rcSub, clrText, title, pWindowData->TitleHighlights);
                 } else {
-                    DrawText(hdc, pWindowData->Title.c_str(), -1, &rcSub, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+                    DrawTextWithHighlight(hdc, rcSub, clrText, pWindowData->Title, pWindowData->TitleHighlights);
                 }
-            } else {
-                // Leave some margin at left
-                rcSub.left += 3;
+            } else if (col == 2) {
+                //// Draw vertical separator line between columns, this is little dark gray. The same color 
+                //// is used for the border of the AltTab window.
+                //HPEN hPen = CreatePen(PS_SOLID, 1, RGB(90, 90, 90));
+                //HPEN hOldPen = (HPEN)SelectObject(hdc, hPen);
+                //MoveToEx(hdc, rcSub.left - 1, rcSub.top, nullptr);
+                //LineTo(hdc, rcSub.left - 1, rcSub.bottom);
+                //SelectObject(hdc, hOldPen);
+                //DeleteObject(hPen);
 
-                DrawText(hdc, pWindowData->ProcessName.c_str(), -1, &rcSub, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
+                // Leave some margin at left
+                rcSub.left += 4;
+
+                DrawTextWithHighlight(
+                    hdc, rcSub, clrText, pWindowData->ProcessName, pWindowData->ProcessNameHighlights);
             }
         }
 
@@ -371,24 +490,48 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
 
                     // If the window is to be inserted, now apply the search string
                     if (insert && !g_SearchString.empty()) {
-                        insert = InStr(item.ProcessName, g_SearchString) || InStr(item.Title, g_SearchString);
+                        // Do NOT insert by default, unless a match is found if search string is not empty
+                        insert = true;
 
-                        double matchRatio = insert ? 100 : 0;
-                        // Search in process name
-                        if (!insert && g_Settings.FuzzyMatchPercent != 100) {
-                            matchRatio = GetPartialRatioW(g_SearchString, item.ProcessName);
-                            if (matchRatio >= g_Settings.FuzzyMatchPercent) {
-                                insert = true;
+                        // First search for exact match in title and process name
+                        // Split the search string by spaces and check if all parts are present
+                        std::vector<std::wstring> searchParts = Split(ToLower(g_SearchString));
+                        const std::wstring titleLower   = ToLower(item.Title);
+
+                        for (const auto& part : searchParts) {
+                            size_t titleIndex = titleLower.find(part);
+                            size_t processNameIndex = ToLower(item.ProcessName).find(part);
+
+                            // Search in window title
+                            if (titleIndex != std::wstring::npos) {
+                                item.TitleHighlights.insert({ titleIndex, titleIndex + part.size() - 1 });
+                            } else if (g_Settings.FuzzyMatchPercent != 100) {
+                                FuzzyMatchResult fuzzyMatchRatio = GetPartialRatioW(part, titleLower);
+                                if (fuzzyMatchRatio.score >= g_Settings.FuzzyMatchPercent) {
+                                    item.TitleHighlights.insert(
+                                        { fuzzyMatchRatio.start_pos, fuzzyMatchRatio.end_pos - 1 });
+                                    titleIndex = fuzzyMatchRatio.start_pos;
+                                }
+                            }
+
+                            // Search in process name
+                            if (processNameIndex != std::wstring::npos) {
+                                item.ProcessNameHighlights.insert({ processNameIndex, processNameIndex + part.size() - 1 });
+                            } else if (g_Settings.FuzzyMatchPercent != 100) {
+                                FuzzyMatchResult fuzzyMatchRatio = GetPartialRatioW(part, item.ProcessName);
+                                if (fuzzyMatchRatio.score >= g_Settings.FuzzyMatchPercent) {
+                                    item.ProcessNameHighlights.insert(
+                                        { fuzzyMatchRatio.start_pos, fuzzyMatchRatio.end_pos - 1 });
+                                    processNameIndex = fuzzyMatchRatio.start_pos;
+                                }
+                            }
+
+                            if (titleIndex == std::wstring::npos && processNameIndex == std::wstring::npos) {
+                                insert = false;
+                                break;
                             }
                         }
-                        // Search in window title
-                        if (!insert && g_Settings.FuzzyMatchPercent != 100) {
-                            matchRatio = GetPartialRatioW(g_SearchString, item.Title);
-                            if (matchRatio >= g_Settings.FuzzyMatchPercent) {
-                                insert = true;
-                            }
-                        }
-                        //AT_LOG_INFO("matchRatio = %5.1f, title = [%s]", matchRatio, WStrToUTF8(item.Title).c_str());
+                        //AT_LOG_INFO("matchRatio = %5.1f, title = [%s]", , WStrToUTF8(item.Title).c_str());
                     }
 
                     if (insert) {
@@ -1194,9 +1337,13 @@ void ContextMenuItemHandler(HWND hWnd, HMENU /*hSubMenu*/, UINT menuItemId) {
         // not find a way to avoid this. So, turning off the timer.
         KillTimer(hWnd, TIMER_WINDOW_COUNT);
 
+        // Set flag to ignore WM_ACTIVATE message temporarily since we are going to show a message box now.
+        // So, the AltTab window should not be closed when the message box is shown.
+        g_bIgnoreWM_ACTIVATE = true;
+
         bool closeAllWindows = true;
         if (g_Settings.PromptTerminateAll) {
-            int result = MessageBoxW(
+            const int result = MessageBoxW(
                 hWnd,
                 L"Are you sure you want to close all windows?",
                 AT_PRODUCT_NAMEW L": Close All Windows",
@@ -1212,6 +1359,8 @@ void ContextMenuItemHandler(HWND hWnd, HMENU /*hSubMenu*/, UINT menuItemId) {
             SetAltTabActiveWindow();
         }
 
+        g_bIgnoreWM_ACTIVATE = false;
+
         SetTimer(hWnd, TIMER_WINDOW_COUNT, TIMER_WINDOW_COUNT_ELAPSE, nullptr);
     }
     break;
@@ -1225,7 +1374,7 @@ void ContextMenuItemHandler(HWND hWnd, HMENU /*hSubMenu*/, UINT menuItemId) {
 
         bool terminateAllWindows = true;
         if (g_Settings.PromptTerminateAll) {
-            int result = MessageBoxW(
+            int result = ATMessageBoxW(
                 hWnd,
                 L"Are you sure you want to terminate all windows?",
                 AT_PRODUCT_NAMEW L": Close All Windows",
@@ -1323,7 +1472,7 @@ void ContextMenuItemHandler(HWND hWnd, HMENU /*hSubMenu*/, UINT menuItemId) {
         AT_LOG_INFO("ID_CONTEXTMENU_EXIT");
         DestroyAltTabWindow();
         PostQuitMessage(0);
-        //int result = MessageBoxW(
+        //int result = ATMessageBoxW(
         //    hWnd,
         //    L"Are you sure you want to exit?",
         //    AT_PRODUCT_NAMEW,
@@ -1354,6 +1503,27 @@ BOOL TerminateProcessEx(DWORD pid) {
 void ATCloseWindow(const int index) {
     if (index >= 0 && index < g_AltTabWindows.size()) {
         AltTabWindowData& windowData = g_AltTabWindows[index];
+
+#ifdef _DEBUG
+        // Ignore Visual Studio IDEs in debug mode
+        if (EqualsIgnoreCase(windowData.ProcessName, L"devenv.exe")
+            || EqualsIgnoreCase(windowData.ProcessName, L"Code.exe")
+            || EqualsIgnoreCase(windowData.ProcessName, L"Outlook.exe")
+            || EqualsIgnoreCase(windowData.ProcessName, L"xplorer2_64.exe")
+            || EqualsIgnoreCase(windowData.ProcessName, L"msedge.exe")
+            || EqualsIgnoreCase(windowData.ProcessName, L"OneNote.exe")
+            || EqualsIgnoreCase(windowData.ProcessName, L"Fork.exe")
+            || EqualsIgnoreCase(windowData.ProcessName, L"ConEmu64.exe")
+            || EqualsIgnoreCase(windowData.ProcessName, L"ms-teams.exe")
+            || EqualsIgnoreCase(windowData.ProcessName, L"AltTab.exe")) {
+            AT_LOG_INFO(
+                "Ignoring: ProcessName: [%-15ls], Title:[%ls] ...",
+                windowData.ProcessName.c_str(),
+                windowData.Title.c_str());
+            return;
+        }
+#endif // _DEBUG
+
         windowData.IsBeingClosed = true;
         AT_LOG_INFO("ATCloseWindow: index: %d, hWnd: %#x, hOwner: %#x, Title: %ls", index, windowData.hWnd, windowData.hOwner, windowData.Title.c_str());
 
@@ -1385,14 +1555,14 @@ void ATCloseWindow(const int index) {
 
 bool ATMapVirtualKey(UINT uCode, wchar_t& vkCode) {
     wchar_t ch = static_cast<wchar_t>(uCode);
-    //AT_LOG_INFO("uCode: %c, ch: %c", uCode, ch);
+    AT_LOG_INFO("uCode: [%c], ch: [%c]", uCode, ch);
 
     if (!iswprint((wint_t)uCode)) {
         vkCode = '\0';
         return false;
     }
 
-    bool isShiftPressed = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
+    const bool isShiftPressed = (GetKeyState(VK_SHIFT) & 0x8000) != 0;
 
     // Check for alphabetic and digit keys
     if ((uCode >= 'A' && uCode <= 'Z') || (uCode >= '0' && uCode <= '9')) {
@@ -1531,7 +1701,7 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
 
     // Here adding 1 pixel to the Y position to avoid the static text control overlap with the ListView control
     if (g_Settings.ShowSearchString) {
-        Y += staticTextHeight + 1;
+        Y += staticTextHeight;
     } else {
         staticTextHeight = -1;
     }
@@ -1635,25 +1805,27 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
     }
     RECT rcListView;
     GetClientRect(g_hListView, &rcListView);
-    int itemHeight =
+    const int itemHeight =
         ListView_GetItemRect(g_hListView, 0, &rcListView, LVIR_BOUNDS) ? rcListView.bottom - rcListView.top : 0;
-    int itemCount = ListView_GetItemCount(g_hListView);
-    int requiredHeight = itemHeight * itemCount + headerHeight + staticTextHeight + 3;
+    const int itemCount = ListView_GetItemCount(g_hListView);
+    int requiredHeight = itemHeight * itemCount + headerHeight + staticTextHeight + 2;
 
     if (requiredHeight <= g_Settings.WindowHeight) {
         SetWindowPos(hWnd, HWND_TOPMOST, windowX, windowY, windowWidth, requiredHeight, SWP_NOZORDER);
         WindowResizeAndPosition(hWnd, wndWidth, requiredHeight);
     } else {
-        int scrollBarWidth = GetSystemMetrics(SM_CXVSCROLL);
-        int processNameWidth = GetColProcessNameWidth();
-        int colTitleWidth = g_Settings.WindowWidth - (COL_ICON_WIDTH + processNameWidth) - scrollBarWidth - 1;
-        int lvHeight = (g_Settings.WindowHeight - itemHeight + 1) / itemHeight * itemHeight;
-        requiredHeight = lvHeight + headerHeight + staticTextHeight + 3;
+        const int scrollBarWidth       = GetSystemMetrics(SM_CXVSCROLL);
+        const int processNameWidth     = GetColProcessNameWidth();
+        const int colTitleWidth        = g_Settings.WindowWidth - (COL_ICON_WIDTH + processNameWidth) - scrollBarWidth - 2;
+        const int numberOfVisibleItems = (g_Settings.WindowHeight - itemHeight + 1) / itemHeight;
+        const int lvHeight             = numberOfVisibleItems * itemHeight + headerHeight;
+
+        requiredHeight = lvHeight + staticTextHeight + 2;
 
         ListView_SetColumnWidth(hListView, 1, colTitleWidth);
 
         // Here, reducing the window width by 1 (-1) to fit the scrollbar properly in the window.
-        SetWindowPos(hListView, nullptr, 0, 0, windowWidth - 1, lvHeight, SWP_NOMOVE | SWP_NOZORDER);
+        SetWindowPos(hListView, nullptr, 0, 0, windowWidth - 2, lvHeight, SWP_NOMOVE | SWP_NOZORDER);
         SetWindowPos(hWnd, HWND_TOPMOST, windowX, windowY, windowWidth, requiredHeight, SWP_NOZORDER);
         WindowResizeAndPosition(hWnd, wndWidth, requiredHeight);
     }
@@ -1752,10 +1924,7 @@ void ATW_OnTimer(HWND /*hwnd*/, UINT /*id*/) {
     if (!doRefresh) {
         // Deep compare the two vectors and update only if there is a change
         for (int i = 0; i < altTabWindows.size(); ++i) {
-            const auto& a = altTabWindows[i];
-            const auto& b = g_AltTabWindows[i];
-            if (a.hWnd != b.hWnd || a.hOwner != b.hOwner || a.PID != b.PID || a.Title != b.Title
-                || a.ProcessName != b.ProcessName) {
+            if (altTabWindows[i] != g_AltTabWindows[i]) {
                 doRefresh = true;
                 break;
             }
@@ -1768,7 +1937,8 @@ void ATW_OnTimer(HWND /*hwnd*/, UINT /*id*/) {
 
 void ATW_OnActivate(HWND /*hwnd*/, UINT state, HWND /*hwndActDeact*/, BOOL /*fMinimized*/) {
     AT_LOG_TRACE;
-    if (state == WA_INACTIVE) {
+    AT_LOG_INFO("WM_ACTIVATE: g_bIgnoreWM_ACTIVATE: %d", g_bIgnoreWM_ACTIVATE);
+    if (state == WA_INACTIVE && !g_bIgnoreWM_ACTIVATE) {
         AT_LOG_INFO("WM_ACTIVATE: The application is becoming inactive, close the window");
         // The application is becoming inactive, close the window
         DestroyAltTabWindow();
@@ -1880,21 +2050,444 @@ BOOL ATW_OnNotify(HWND /*hwnd*/, int /*idFrom*/, NMHDR* pnmhdr) {
         return TRUE;
     }
 
-    if (pnmhdr->code == NM_CLICK) {
-        // Check if the single-click event is from your ListView control
-        if (pnmhdr->hwndFrom == g_hListView) {
-            // First check if the mouse is over on close button area
-            if (g_IsMouseOverCloseButton) {
-                // Close the window of the item under mouse cursor
-                if (g_nLVHotItem != -1) {
-                    ATCloseWindow(g_nLVHotItem);
-                }
-            } else {
-                DestroyAltTabWindow(true);
+    // Check if the single-click event is from your ListView control
+    if (pnmhdr->hwndFrom == g_hListView && pnmhdr->code == NM_CLICK) {
+        // First check if the mouse is over on close button area
+        if (g_IsMouseOverCloseButton) {
+            // Close the window of the item under mouse cursor
+            if (g_nLVHotItem != -1) {
+                ATCloseWindow(g_nLVHotItem);
             }
-            return TRUE;
+        } else {
+            DestroyAltTabWindow(true);
         }
+        return TRUE;
     }
 
     return FALSE;
+}
+
+// ----------------------------------------------------------------------------
+// Message handler for about box.
+// ----------------------------------------------------------------------------
+INT_PTR CALLBACK ATAboutDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam) {
+    UNREFERENCED_PARAMETER(lParam);
+    switch (message)
+    {
+    case WM_INITDIALOG: {
+        HICON hIcon = LoadIcon(g_hInstance, MAKEINTRESOURCE(IDI_ALTTAB));
+        SendMessageW(hDlg, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
+        SendMessageW(hDlg, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
+
+        // Center the dialog on the screen
+        int screenWidth  = GetSystemMetrics(SM_CXSCREEN);
+        int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+        RECT dlgRect;
+        GetWindowRect(hDlg, &dlgRect);
+
+        int dlgWidth  = dlgRect.right - dlgRect.left;
+        int dlgHeight = dlgRect.bottom - dlgRect.top;
+
+        int posX = (screenWidth  - dlgWidth ) / 2;
+        int posY = (screenHeight - dlgHeight) / 2;
+
+        SetWindowPos(hDlg, HWND_TOP, posX, posY, 0, 0, SWP_NOSIZE);
+        // Set the dialog as an app window, otherwise not displayed in task bar
+        SetWindowLong(hDlg, GWL_EXSTYLE, GetWindowLong(hDlg, GWL_EXSTYLE) | WS_EX_APPWINDOW);
+
+        std::wstring productInfo = std::format(L"<a href=\"{}\">{}</a> v{}", AT_PRODUCT_PAGE, AT_PRODUCT_NAMEW, AT_VERSION_TEXTW);
+        std::wstring copyright   = std::format(L"Copyright © {} <a href=\"{}\">{}</a>", AT_PRODUCT_YEARW, AT_PRODUCT_PAGE, AT_AUTHOR_NAME);
+
+        SetDlgItemTextW(hDlg, IDC_SYSLINK_ABOUT_PRODUCT_NAME, productInfo.c_str());
+        SetDlgItemTextW(hDlg, IDC_SYSLINK_ABOUT_COPYRIGHT   , copyright.c_str());
+    }
+    return (INT_PTR)TRUE;
+
+    case WM_COMMAND:
+        if (LOWORD(wParam) == IDOK || LOWORD(wParam) == IDCANCEL)
+        {
+            EndDialog(hDlg, LOWORD(wParam));
+            return (INT_PTR)TRUE;
+        }
+        break;
+
+    case WM_NOTIFY:
+        if (wParam == IDC_SYSLINK_ABOUT_PRODUCT_NAME) {
+            NMHDR* pnmh = (NMHDR*)lParam;
+            if (pnmh->code == NM_CLICK) {
+                ShellExecute(nullptr, L"open", AT_PRODUCT_PAGE, nullptr, nullptr, SW_SHOWNORMAL);
+            }
+        } else if (wParam == IDC_SYSLINK_ABOUT_COPYRIGHT) {
+            NMHDR* pnmh = (NMHDR*)lParam;
+            if (pnmh->code == NM_CLICK) {
+                ShellExecute(nullptr, L"open", AT_AUTHOR_PAGE, nullptr, nullptr, SW_SHOWNORMAL);
+            }
+        }
+        break;
+
+    case WM_DESTROY:
+        DestroyIcon((HICON)SendMessageW(hDlg, WM_GETICON, ICON_SMALL, 0));
+        DestroyIcon((HICON)SendMessageW(hDlg, WM_GETICON, ICON_BIG, 0));
+        break;
+    }
+    return (INT_PTR)FALSE;
+}
+
+/**
+ * \brief Destroy AltTab Window and do necessary cleanup here
+ * 
+ * \param activate   Input parameter to activate the selected window or not
+ */
+void DestroyAltTabWindow(const bool activate) {
+    if (g_hAltTabWnd == nullptr || g_hAltTabIsBeingClosed) {
+        return;
+    }
+
+    AT_LOG_INFO("DestroyAltTabWindow: activate = %d", activate);
+
+    // Set flag to true to avoid re-entry from WM_ACTIVATEAPP
+    g_hAltTabIsBeingClosed = true;
+
+    // Hide custom tooltip
+    HideCustomToolTip();
+
+    // Kill timer
+    KillTimer(g_hMainWnd, TIMER_CHECK_ALT_KEYUP);
+
+    if (g_idThreadAttachTo) {
+        AttachThreadInput(GetCurrentThreadId(), g_idThreadAttachTo, FALSE);
+        g_idThreadAttachTo = 0;
+    }
+
+    if (activate) {
+        int selectedInd = ATWListViewGetSelectedItem();
+        HWND hWnd = nullptr;
+        if (selectedInd != -1) {
+            hWnd = g_AltTabWindows[selectedInd].hWnd;
+            AT_LOG_INFO("hWnd = [%#x], title = [%s]", hWnd, GetWindowTitleExA(hWnd).c_str());
+        }
+        DestroyWindow(g_hAltTabWnd);
+        PostMessage(g_hAltTabWnd, WM_CLOSE, 0, 0);
+        if (hWnd && !IsHungAppWindowEx(hWnd)) {
+            ActivateWindow(hWnd);
+        }
+    } else {
+        DestroyWindow(g_hAltTabWnd);
+    }
+    
+    // CleanUp
+    g_hAltTabWnd             = nullptr;
+    g_IsAltTab               = false;
+    g_IsAltCtrlTab           = false;
+    g_IsAltBacktick          = false;
+    g_SelectedIndex          = -1;
+    g_nLVHotItem             = -1;
+    g_MouseHoverIndex        = -1;
+    g_IsMouseOverCloseButton = false;
+
+    g_AltTabWindows.clear();
+    g_SearchString .clear();
+    g_AltBacktickWndInfo     = {};
+    g_hAltTabIsBeingClosed   = false;
+}
+
+// ----------------------------------------------------------------------------
+// Activate window of the given window handle
+// ----------------------------------------------------------------------------
+void ActivateWindow(HWND hTargetWnd) {
+    AT_LOG_TRACE;
+
+	 HWND hForegroundWnd = GetForegroundWindow();
+    if (hTargetWnd == hForegroundWnd) {
+        return;
+    }
+
+    // Bring the window to the foreground
+    // Determines whether the specified window is minimized (iconic).
+    if (IsIconic(hTargetWnd)) {
+        //ShowWindow(hWnd, SW_RESTORE);
+        PostMessage(hTargetWnd, WM_SYSCOMMAND, SC_RESTORE, 0);
+    } else {
+        BOOL result = SetForegroundWindow(hTargetWnd);
+        if (!result && hForegroundWnd != hTargetWnd) {
+            // Failed to bring an elevated window to the top from a non-elevated process.
+            AT_LOG_ERROR("SetForegroundWindow(hWnd) failed!");
+
+            ShowWindow(hTargetWnd, SW_SHOW);
+            result = BringWindowToTop(hTargetWnd);
+            HWND hFGWnd = GetForegroundWindow();
+            if (!result && hFGWnd != hTargetWnd) {
+                AT_LOG_ERROR("BringWindowToTop(hWnd) failed!");
+            } else {
+                SetActiveWindow(hTargetWnd);
+                AT_LOG_INFO("BringWindowToTop(hWnd) succeeded!");
+                //return;
+            }
+
+            // It seems it is always better to use AttachThreadInput than 
+            // SetForegroundWindow even the BringWindowToTop succeeded. So not
+            // going to comment the below piece of code.
+            DWORD idForeground = GetWindowThreadProcessId(hForegroundWnd, nullptr);
+            DWORD idTarget     = GetWindowThreadProcessId(hTargetWnd    , nullptr);
+
+            if (hFGWnd && !IsHungAppWindowEx(hFGWnd))
+                AttachThreadInput(idForeground, idTarget, TRUE);
+            
+            if (!SetForegroundWindow(hTargetWnd)) {
+                INPUT inp[4];
+                ZeroMemory(&inp, sizeof(inp));
+                inp[0].type       = inp[1].type       = inp[2].type   = inp[3].type   = INPUT_KEYBOARD;
+                inp[0].ki.wVk     = inp[1].ki.wVk     = inp[2].ki.wVk = inp[3].ki.wVk = VK_MENU;
+                inp[0].ki.dwFlags = inp[2].ki.dwFlags = KEYEVENTF_EXTENDEDKEY;
+                inp[1].ki.dwFlags = inp[3].ki.dwFlags = KEYEVENTF_EXTENDEDKEY | KEYEVENTF_KEYUP;
+                SendInput(4, inp, sizeof(INPUT));
+
+                SetForegroundWindow(hTargetWnd);
+            }
+
+            if (hFGWnd && !IsHungAppWindowEx(hFGWnd))
+                AttachThreadInput(idForeground, idTarget, FALSE);
+        }
+    }
+    SetActiveWindow(hTargetWnd);
+}
+
+BOOL IsHungAppWindowEx(HWND hwnd) {
+    if (g_pfnIsHungAppWindow && g_pfnIsHungAppWindow(hwnd)) {
+        std::string title = GetWindowTitleExA(hwnd);
+        AT_LOG_INFO("IsHungWnd: [%s]", title.c_str());
+        return (TRUE);
+    }
+
+    LRESULT lResult = SendMessageTimeoutW(hwnd, WM_NULL, 0, 0, SMTO_ABORTIFHUNG, 249, nullptr);
+    if (lResult)
+        return (FALSE);
+
+    DWORD dwErr = GetLastError();
+    return (dwErr == 0 || dwErr == 1460);
+}
+
+void ShowHelpWindow() {
+    ATShellExecuteEx(L"AltTab.chm");
+}
+
+void ShowReadMeWindow() {
+    ATShellExecuteEx(L"ReadMe.txt");
+}
+
+void ShowReleaseNotesWindow() {
+    ATShellExecuteEx(L"ReleaseNotes.txt");
+}
+
+/*!
+ * Open the file with the default associated program
+ * 
+ * \param fileName   File name
+ */
+void ATShellExecuteEx(const std::wstring& fileName) {
+    std::filesystem::path filePath = GetAppDirPath();
+    filePath.append(fileName);
+
+    // Use ShellExecute to open the file with the default associated program
+    HINSTANCE hInstance = ShellExecuteW(nullptr, L"open", filePath.wstring().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+
+    if ((INT_PTR)hInstance > 32) {
+        // ShellExecute returns a value greater than 32 if successful
+        AT_LOG_INFO("File opened successfully!");
+    } else {
+        // Otherwise, it indicates an error
+        AT_LOG_ERROR("Failed to open file!");
+        LogLastErrorInfo();
+    }
+}
+
+std::wstring GetAppDirPath() {
+    wchar_t szPath[MAX_PATH] = { 0 };
+    GetModuleFileNameW(g_hInstance, szPath, MAX_PATH);
+    std::filesystem::path dirPath = szPath;
+    return dirPath.parent_path().wstring();
+}
+
+void LogLastErrorInfo() {
+    // Get the last error code
+    const DWORD errorCode = GetLastError();
+
+    // Get the error message
+    LPVOID errorMessage;
+    FormatMessageW(
+        FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM,
+        nullptr,
+        errorCode,
+        0,
+        reinterpret_cast<LPWSTR>(&errorMessage),
+        0,
+        nullptr);
+    std::wstring ret = (errorMessage ? reinterpret_cast<LPCWSTR>(errorMessage) : L"");
+    AT_LOG_ERROR("  Error Code   : %d", errorCode);
+    AT_LOG_ERROR("  Error Message: %s", WStrToUTF8(ret).c_str());
+}
+
+// Function to create and show a custom tooltip at the mouse location
+void CreateCustomToolTip() {
+    AT_LOG_TRACE;
+    // Create a tooltip window
+    g_hCustomToolTip = CreateWindowExW(
+        WS_EX_TOPMOST,
+        TOOLTIPS_CLASSW,
+        nullptr,
+        TTS_NOPREFIX | TTS_ALWAYSTIP,
+        0,
+        0,
+        0,
+        0,
+        nullptr,
+        nullptr,
+        g_hInstance,
+        nullptr);
+
+    if (!g_hCustomToolTip) {
+        AT_LOG_ERROR("Failed to create tooltip window.");
+        LogLastErrorInfo();
+        return;
+    }
+
+	 // Initialize members of the toolinfo structure
+    g_ToolInfo.cbSize      = sizeof(TOOLINFO);
+    g_ToolInfo.uFlags      = TTF_TRACK;
+    g_ToolInfo.hwnd        = nullptr;
+    g_ToolInfo.hinst       = nullptr;
+    g_ToolInfo.uId         = 0;
+    g_ToolInfo.lpszText    = (LPWSTR)L"Creating tooltip...";
+
+    // ToolTip control will cover the whole window
+    g_ToolInfo.rect.left   = 0;
+    g_ToolInfo.rect.top    = 0;
+    g_ToolInfo.rect.right  = 0;
+    g_ToolInfo.rect.bottom = 0;
+
+	 // Send an add tool message to the tooltip control window
+    SendMessageW(g_hCustomToolTip, TTM_ADDTOOL, 0, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
+
+    // Enable multiple lines
+    SendMessageW(g_hCustomToolTip, TTM_SETMAXTIPWIDTH, 0, MAXINT);
+
+    SendMessageW(g_hCustomToolTip, TTM_SETTIPBKCOLOR, RGB(255, 255, 0), 0);
+}
+
+void ShowCustomToolTip(const std::wstring& tooltipText, const int duration /*= 3000*/) {
+    AT_LOG_TRACE;
+#if 0
+    // TODO: Still this is not working properly so going with alternative
+    ToolTipInfo* tti = new ToolTipInfo { tooltipText, duration };
+    //std::thread tooltipThread(ShowCustomToolTipThread, (LPVOID)&tti);
+    //tooltipThread.detach();
+    CreateThread(nullptr, 0, ShowCustomToolTipThread, (LPVOID)tti, 0, nullptr);
+#else
+    if (!g_TooltipVisible) {
+       // Get mouse coordinates
+       POINT pt;
+       GetCursorPos(&pt);
+
+       // Slight offset to avoid covering the mouse pointer
+       g_ToolInfo.lpszText = (LPWSTR)(LPCWSTR)tooltipText.c_str();
+       SendMessageW(g_hCustomToolTip, TTM_SETTOOLINFO,      0, (LPARAM)&g_ToolInfo);
+       SendMessageW(g_hCustomToolTip, TTM_TRACKPOSITION,    0, (LPARAM)(DWORD)MAKELONG(pt.x + 12, pt.y + 12));
+       SendMessageW(g_hCustomToolTip, TTM_TRACKACTIVATE, true, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
+   
+       g_TooltipTimerId = SetTimer(nullptr, TIMER_CUSTOM_TOOLTIP, duration, HideCustomToolTip);
+       g_TooltipVisible = true;
+    }
+#endif // 0
+}
+
+void ShowCustomToolTipAt(const std::wstring& tooltipText, const POINT& pt, const int duration /*= 3000*/) {
+    AT_LOG_TRACE;
+    if (!g_TooltipVisible) {
+        g_ToolInfo.lpszText = (LPWSTR)(LPCWSTR)tooltipText.c_str();
+        SendMessageW(g_hCustomToolTip, TTM_SETTOOLINFO  ,    0, (LPARAM)&g_ToolInfo);
+        SendMessageW(g_hCustomToolTip, TTM_TRACKPOSITION,    0, (LPARAM)(DWORD)MAKELONG(pt.x, pt.y));
+        SendMessageW(g_hCustomToolTip, TTM_TRACKACTIVATE, true, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
+
+        g_TooltipTimerId = SetTimer(nullptr, TIMER_CUSTOM_TOOLTIP, duration, HideCustomToolTip);
+        g_TooltipVisible = true;
+    }
+}
+
+void CALLBACK HideCustomToolTip(HWND /*hWnd*/, UINT /*uMsg*/, UINT_PTR /*idEvent*/, DWORD /*dwTime*/) {
+    AT_LOG_TRACE;
+    KillTimer(nullptr, g_TooltipTimerId);
+    SendMessageW(g_hCustomToolTip, TTM_TRACKACTIVATE, false, (LPARAM)(LPTOOLINFO)&g_ToolInfo);
+    g_TooltipVisible = false;
+}
+
+HBITMAP LoadPngAsHBITMAP(HINSTANCE hInst, int resID, int cx, int cy) {
+    // Load PNG from resource
+    HRSRC hRes = FindResource(hInst, MAKEINTRESOURCE(resID), RT_RCDATA);
+    if (!hRes)
+        return NULL;
+    DWORD imageSize = SizeofResource(hInst, hRes);
+    HGLOBAL hMem = LoadResource(hInst, hRes);
+    if (!hMem)
+        return NULL;
+    void* pImageData = LockResource(hMem);
+
+    HGLOBAL hBuffer = GlobalAlloc(GMEM_MOVEABLE, imageSize);
+    void* pBuffer = GlobalLock(hBuffer);
+    memcpy(pBuffer, pImageData, imageSize);
+    GlobalUnlock(hBuffer);
+
+    IStream* pStream = nullptr;
+    CreateStreamOnHGlobal(hBuffer, TRUE, &pStream);
+
+    Gdiplus::Bitmap* bmp = Gdiplus::Bitmap::FromStream(pStream);
+    pStream->Release();
+
+    if (!bmp || bmp->GetLastStatus() != Gdiplus::Ok)
+        return NULL;
+
+    // Scale if needed
+    Gdiplus::Bitmap* scaled = new Gdiplus::Bitmap(cx, cy, PixelFormat32bppARGB);
+    Gdiplus::Graphics g(scaled);
+    g.DrawImage(bmp, 0, 0, cx, cy);
+    delete bmp;
+
+    HBITMAP hBmp = NULL;
+    scaled->GetHBITMAP(Gdiplus::Color(0, 0, 0, 0), &hBmp);
+    delete scaled;
+
+    return hBmp;
+}
+
+void InitImageList() {
+    const int imageSize = 32;
+    g_hImageList = ImageList_Create(imageSize, imageSize, ILC_COLOR32 | ILC_MASK, 1, 1);
+    if (!g_hImageList) {
+        AT_LOG_ERROR("Failed to create image list.");
+        return;
+    }
+
+    // Load images into the image list
+    HBITMAP hBmpCloseActive = LoadPngAsHBITMAP(g_hInstance, IDB_PNG_CLOSE_WINDOW_ACTIVE, imageSize, imageSize);
+    if (hBmpCloseActive) {
+        g_nImgCloseActiveInd = ImageList_Add(g_hImageList, hBmpCloseActive, nullptr);
+        DeleteObject(hBmpCloseActive);
+    }
+
+    HBITMAP hBmpCloseInactive = LoadPngAsHBITMAP(g_hInstance, IDB_PNG_CLOSE_WINDOW_INACTIVE, imageSize, imageSize);
+    if (hBmpCloseInactive) {
+        g_nImgCloseInactiveInd = ImageList_Add(g_hImageList, hBmpCloseInactive, nullptr);
+        DeleteObject(hBmpCloseInactive);
+    }
+}
+
+int ATMessageBoxW(HWND hWnd, LPCWSTR lpText, LPCWSTR lpCaption, UINT uType) {
+    // Set flag to ignore WM_ACTIVATE message temporarily since we are going to show a message box now.
+    // So, the AltTab window should not be closed when the message box is shown.
+    g_bIgnoreWM_ACTIVATE = true;
+
+    const int result = MessageBoxW(hWnd, lpText, lpCaption, uType);
+
+    g_bIgnoreWM_ACTIVATE = false;
+
+    return result;
 }

@@ -5,6 +5,9 @@
 #include <string>
 #include <locale>
 #include <codecvt>
+#include "fuzzywuzzy.h"
+
+#define AT_MIN(a, b)    (((a) < (b)) ? (a) : (b))
 
 bool EnableConsoleWindow();
 
@@ -37,9 +40,9 @@ double GetPartialRatioA(const char* s1, const char* s2);
 
 double GetRatioW(const wchar_t* s1, const wchar_t* s2);
 
-double GetPartialRatioW(const wchar_t* s1, const wchar_t* s2);
+FuzzyMatchResult GetPartialRatioW(const wchar_t* s1, const wchar_t* s2);
 
-double GetPartialRatioW(const std::wstring& s1, const std::wstring& s2);
+FuzzyMatchResult GetPartialRatioW(const std::wstring& s1, const std::wstring& s2);
 
 int ScaleValueForDPI(int value, int dpi = 96);
 
