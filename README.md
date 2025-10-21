@@ -10,6 +10,10 @@ AltTab is a small application created in C++, Win32, is an alternative for windo
 Hide / Un-hide windows.
 * Provided configuration/setting INI file & UI to change font style, background color, window transparency, width and height.
 
+## SAST Tools
+
+[PVS-Studio](https://pvs-studio.com/en/pvs-studio/?utm_source=website&utm_medium=github&utm_campaign=open_source) - static analyzer for C, C++, C#, and Java code.
+
 ## Screenshots
 ### AltTab main window
 ![](https://github.com/lokeshgovindu/AltTab/blob/master/Screenshots/AltTab.gif)
