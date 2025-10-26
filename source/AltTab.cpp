@@ -112,6 +112,7 @@ int APIENTRY wWinMain(
         AT_LOG_ERROR("Failed to set DPI awareness!");
     }
 
+#if 0
     // Make sure only one instance is running
     HANDLE hMutex = CreateMutex(nullptr, TRUE, AT_PRODUCT_NAMEW);
     if (GetLastError() == ERROR_ALREADY_EXISTS) {
@@ -123,6 +124,7 @@ int APIENTRY wWinMain(
         }
         return 1;
     }
+#endif // 0
 
 #ifdef _AT_LOGGER
     CreateLogger();

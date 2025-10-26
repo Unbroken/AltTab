@@ -13,6 +13,11 @@ Known Issues
 - Available @ https://sourceforge.net/p/alttab/tickets/
 
 
+2025.2.0.1 new features and bug fixes
+-------------------------------------
+- Removed single instance check for time being.
+
+
 2025.2.0.0 new features and bug fixes
 -------------------------------------
 + Highlight search results in AltTab window (supports multi-word search).
