@@ -616,11 +616,13 @@ void CALLBACK CheckAltKeyIsReleased(HWND /*hWnd*/, UINT /*uMsg*/, UINT_PTR /*idE
     }
 }
 
-void TrayContextMenuItemHandler(HWND hWnd, HMENU hSubMenu, UINT menuItemId) {
+void TrayContextMenuItemHandler(HWND /*hWnd*/, HMENU hSubMenu, UINT menuItemId) {
+    // Commented out the hWnd parameter since TrayContextMenuItemHandler is invoked from tray icon and
+    // AltTab window search string context menu as well. So, hWnd is not always g_hMainWnd.
     switch (menuItemId) {
     case ID_TRAYCONTEXTMENU_ABOUTALTTAB:
         AT_LOG_INFO("ID_TRAYCONTEXTMENU_ABOUTALTTAB");
-        DialogBox(g_hInstance, MAKEINTRESOURCE(IDD_ABOUTBOX), hWnd, ATAboutDlgProc);
+        DialogBox(g_hInstance, MAKEINTRESOURCE(IDD_ABOUTBOX), g_hMainWnd, ATAboutDlgProc);
         break;
 
     case ID_TRAYCONTEXTMENU_README:
@@ -744,7 +746,7 @@ void TrayContextMenuItemHandler(HWND hWnd, HMENU hSubMenu, UINT menuItemId) {
         }
 
         const int result = ATMessageBoxW(
-            hWnd,
+            g_hMainWnd,
             L"Are you sure you want to close all windows?",
             AT_PRODUCT_NAMEW L": Close All Windows",
             MB_YESNO | MB_ICONQUESTION | MB_DEFBUTTON2);
