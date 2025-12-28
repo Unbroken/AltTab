@@ -2013,11 +2013,7 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
     g_hSearchString = hSearchString;
 
     // Add cue banner (placeholder text) to the edit control
-    // Get the cue banner text from resources
-    wchar_t cueBannerText[_MAX_PATH];
-    LoadStringW(g_hInstance, IDS_EDIT_CUE_BANNER_TEXT, cueBannerText, 256);
-
-    SendMessageW(hSearchString, EM_SETCUEBANNER, (WPARAM)TRUE, (LPARAM)cueBannerText);
+    SendMessageW(hSearchString, EM_SETCUEBANNER, (WPARAM)TRUE, (LPARAM)g_Settings.SSCueBannerText.c_str());
 
     // Subclass the edit control
     SetWindowSubclass(hSearchString, SearchStringSubclassProc, 1, 0);

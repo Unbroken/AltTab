@@ -22,6 +22,7 @@ using StringList           = std::vector<std::wstring>;
 #define DEFAULT_ALT_TAB_ENABLED              true
 #define DEFAULT_ALT_BACKTICK_ENABLED         true
 #define DEFAULT_ALT_CTRL_TAB_ENABLED         true
+#define DEFAULT_SS_CUE_BANNER_TEXT           L"Search windows by title or process name..."
 #define DEFAULT_SS_FONT_NAME                 L"Lucida Handwriting"
 #define DEFAULT_SS_FONT_SIZE                 11
 #define DEFAULT_SS_FONT_STYLE                L"normal"               // normal, italic, bold and bold italic
@@ -70,6 +71,7 @@ struct AltTabSettings {
     // ----------------------------------------------------------------------------
     // SearchString Font Name, Size, Style, Color and Background Color
     // ----------------------------------------------------------------------------
+    std::wstring           SSCueBannerText;           // Search String Cue Banner Text
     std::wstring           SSFontName;                // Search String Font Name
     int                    SSFontSize;                // Search String Font Size
     std::wstring           SSFontStyle;               // Search String Font Style
