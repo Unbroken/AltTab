@@ -31,7 +31,7 @@
 // ----------------------------------------------------------------------------
 // Global Variables:
 // ----------------------------------------------------------------------------
-HWND           g_hStaticText            = nullptr;
+HWND           g_hSearchString          = nullptr;
 HWND           g_hListView              = nullptr;
 int            g_nLVHotItem             = -1;
 HFONT          g_hSSFont                = nullptr;
@@ -66,6 +66,7 @@ static void    ATW_OnClose           (HWND hwnd);
 static void    ATW_OnCommand         (HWND hwnd, int id, HWND hwndCtl, UINT codeNotify);
 static void    ATW_OnContextMenu     (HWND hwnd, HWND hwndContext, UINT xPos, UINT yPos);
 static BOOL    ATW_OnCreate          (HWND hWnd, LPCREATESTRUCT lpCreateStruct);
+static LRESULT ATW_OnCtlColorEdit    (HWND hWnd, HDC hDC, HWND hCtl, UINT type);
 static LRESULT ATW_OnCtlColorStatic  (HWND hWnd, HDC hDC, HWND hCtl, UINT type);
 static void    ATW_OnDestroy         (HWND hwnd);
 static void    ATW_OnDrawItem        (HWND hwnd, const DRAWITEMSTRUCT* lpDrawItem);
@@ -609,12 +610,21 @@ HWND ShowAltTabWindow(HWND& hAltTabWnd, int direction) {
         SetForegroundWindow(hAltTabWnd);
     }
 
+    // TODO / FIXME:
+    // Sometimes focus is not set to the search string edit control. Always
+    // set the focus to it for time being.
+    SetFocus(g_hSearchString);
+
     // Move to next / previous item based on the direction
-    int selectedInd = (int)SendMessageW(g_hListView, LVM_GETNEXTITEM, (WPARAM)-1, LVNI_SELECTED);
+    const int selectedInd = (int)SendMessageW(g_hListView, LVM_GETNEXTITEM, (WPARAM)-1, LVNI_SELECTED);
     if (selectedInd == -1) return hAltTabWnd;
 
-    int N           = (int)g_AltTabWindows.size();
-    int nextInd     = (selectedInd + N + direction) % N;
+    const int N           = (int)g_AltTabWindows.size();
+    if (N == 0) {
+        AT_LOG_ERROR("No AltTab windows available!");
+        return hAltTabWnd;
+    }
+    const int nextInd     = (selectedInd + N + direction) % N;
 
     ATWListViewSelectItem(nextInd);
 
@@ -912,6 +922,278 @@ static void SetListViewCustomColors(HWND hListView, COLORREF backgroundColor, CO
     SendMessageW(hListView, LVM_SETTEXTCOLOR,   0, (LPARAM)textColor);
 }
 
+LRESULT CALLBACK SearchStringSubclassProc(
+    HWND       hWnd,
+    UINT       uMsg,
+    WPARAM     wParam,
+    LPARAM     lParam,
+    UINT_PTR   /*uIdSubclass*/,
+    DWORD_PTR  /*dwRefData*/)
+{
+    //AT_LOG_TRACE;
+    //AT_LOG_INFO(std::format("uMsg: {:4}, wParam: {}, lParam: {}", uMsg, wParam, lParam).c_str());
+    auto vkCode = wParam;
+    const bool isShiftPressed = GetAsyncKeyState(VK_SHIFT) & 0x8000;
+
+    switch (uMsg) {
+    case WM_KEYDOWN:
+    case WM_SYSKEYDOWN: {
+        AT_LOG_INFO("WM_KEYDOWN/WM_SYSKEYDOWN: wParam = 0x%02X", (unsigned int)wParam);
+        // ----------------------------------------------------------------------------
+        // VK_ESCAPE
+        // ----------------------------------------------------------------------------
+        if (wParam == VK_ESCAPE) {
+            AT_LOG_INFO("VK_ESCAPE");
+            DestroyAltTabWindow();
+        }
+        // ----------------------------------------------------------------------------
+        // VK_DOWN
+        // ----------------------------------------------------------------------------
+        else if (wParam == VK_DOWN) {
+            AT_LOG_INFO("Down Pressed!");
+            ATWListViewSelectNextItem();
+            return TRUE;
+        }
+        // ----------------------------------------------------------------------------
+        // VK_DOWN
+        // ----------------------------------------------------------------------------
+        else if (wParam == VK_UP) {
+            AT_LOG_INFO("Up Pressed!");
+            ATWListViewSelectPrevItem();
+            return TRUE;
+        }
+        // ----------------------------------------------------------------------------
+        // VK_HOME / VK_PRIOR
+        // ----------------------------------------------------------------------------
+        else if (vkCode == VK_HOME || vkCode == VK_PRIOR) {
+            AT_LOG_INFO("Home/PageUp Pressed!");
+            if (!g_AltTabWindows.empty()) {
+                ATWListViewSelectItem(0);
+            }
+            return TRUE;
+        }
+        // ----------------------------------------------------------------------------
+        // VK_END / VK_NEXT
+        // ----------------------------------------------------------------------------
+        else if (vkCode == VK_END || vkCode == VK_NEXT) {
+            AT_LOG_INFO("End/PageDown Pressed!");
+            if (!g_AltTabWindows.empty()) {
+                ATWListViewSelectItem((int)g_AltTabWindows.size() - 1);
+            }
+            return TRUE;
+        }
+        // ----------------------------------------------------------------------------
+        // VK_DELETE
+        // ----------------------------------------------------------------------------
+        else if (vkCode == VK_DELETE) {
+            if (isShiftPressed) {
+                AT_LOG_INFO("Shift+Delete Pressed!");
+                int ind = ATWListViewGetSelectedItem();
+                if (ind == -1)
+                    return TRUE;
+                g_AltTabWindows[ind].IsBeingClosed = true;
+                TerminateProcessEx(g_AltTabWindows[ind].PID);
+            } else {
+                AT_LOG_INFO("Delete Pressed!");
+
+                // Send the SC_CLOSE command to the window
+                const int ind = ATWListViewGetSelectedItem();
+                if (ind == -1)
+                    return TRUE;
+                AT_LOG_INFO("Ind: %d, Title: %s", ind, WStrToUTF8(g_AltTabWindows[ind].Title).c_str());
+                ATCloseWindow(ind);
+            }
+            return TRUE;
+        }
+        // ----------------------------------------------------------------------------
+        // Backtick
+        // ----------------------------------------------------------------------------
+        else if (vkCode == VK_OEM_3) { // 0xC0 - '`~' for US
+            AT_LOG_INFO("Backtick Pressed!, g_IsAltBacktick = %d", g_IsAltBacktick);
+            const int direction = isShiftPressed ? -1 : 1;
+
+            // Move to next / previous same item based on the direction
+            const int selectedInd = ATWListViewGetSelectedItem();
+            if (selectedInd == -1)
+                return TRUE;
+
+            const int N = (int)g_AltTabWindows.size();
+            const auto& processName = g_AltTabWindows[selectedInd].ProcessName; // Selected process name
+            const int pgInd = GetProcessGroupIndex(processName);                // Index in ProcessGroupList
+            int nextInd = (selectedInd + N + direction) % N;                    // Next index to select
+
+            // If the AltTab window is invoked with Alt + Backtick, then we should
+            // move to the next item in the list without checking the process name.
+            if (g_IsAltBacktick) {
+                ATWListViewSelectItem(nextInd);
+                return TRUE;
+            }
+
+            // If the control comes to here, AltTab window is invoked with Alt + Tab
+            // Check if the next item is similar to the selected item
+            for (int i = 1; i < N; ++i) {
+                nextInd = (selectedInd + N + i * direction) % N;
+                if (IsSimilarProcess(pgInd, g_AltTabWindows[nextInd].ProcessName)) {
+                    break;
+                }
+                if (EqualsIgnoreCase(processName, g_AltTabWindows[nextInd].ProcessName)) {
+                    break;
+                }
+                nextInd = -1;
+            }
+
+            if (nextInd != -1)
+                ATWListViewSelectItem(nextInd);
+            return TRUE;
+        }
+        // ----------------------------------------------------------------------------
+        // VK_F1
+        // ----------------------------------------------------------------------------
+        else if (vkCode == VK_F1) {
+            DestroyAltTabWindow();
+            if (isShiftPressed) {
+                DialogBoxW(g_hInstance, MAKEINTRESOURCE(IDD_ABOUTBOX), nullptr, ATAboutDlgProc);
+            } else {
+                ShowHelpWindow();
+            }
+            return TRUE;
+        }
+        // ----------------------------------------------------------------------------
+        // Shift + VK_F1
+        // ----------------------------------------------------------------------------
+        else if (isShiftPressed && vkCode == VK_F1) {
+            DestroyAltTabWindow();
+            DialogBoxW(g_hInstance, MAKEINTRESOURCE(IDD_ABOUTBOX), nullptr, ATAboutDlgProc);
+            return TRUE;
+        }
+        // ----------------------------------------------------------------------------
+        // VK_F2
+        // ----------------------------------------------------------------------------
+        else if (vkCode == VK_F2) {
+            DestroyAltTabWindow();
+            // Do NOT assign owner for this, if owner is assigned and the settings
+            // dialog is not active, then it won't be displayed in alt tab windows list.
+            if (g_hSettingsWnd == nullptr) {
+                DialogBoxW(g_hInstance, MAKEINTRESOURCE(IDD_SETTINGS), nullptr, ATSettingsDlgProc);
+            } else {
+                SetForegroundWindow(g_hSettingsWnd);
+            }
+            return TRUE;
+        }
+        // ----------------------------------------------------------------------------
+        // VK_ENTER
+        // ----------------------------------------------------------------------------
+        else if (vkCode == VK_RETURN) {
+            AT_LOG_INFO("Enter Pressed!");
+            DestroyAltTabWindow(true);
+            return TRUE;
+        }
+        // ----------------------------------------------------------------------------
+        // WM_CHAR won't be sent when ALT is pressed, this is the alternative to handle when a key is pressed.
+        // And collect the chars and form a search string.
+        // Ignore Backtick (`), Tab, Backspace, and non-printable characters while forming search string.
+        // ----------------------------------------------------------------------------
+        else if ((g_IsAltTab || g_IsAltBacktick) && !g_IsAltCtrlTab) {
+            wchar_t ch = '\0';
+            const bool isChar = ATMapVirtualKey((UINT)wParam, ch);
+            bool update = false;
+            if (isChar && !(wParam == '`' || wParam == VK_DELETE || wParam == VK_TAB || ch == '\0')) {
+                g_SearchString += ch;
+                update = true;
+            } else if (wParam == VK_BACK && !g_SearchString.empty()) {
+                g_SearchString.pop_back();
+                update = true;
+            }
+            AT_LOG_INFO("IsChar, %d, Update: %d, Char: %#4x, SearchString: [%s], Len(SearchString): %d", isChar, update, ch, WStrToUTF8(g_SearchString).c_str(), (int)g_SearchString.size());
+
+            if (update) {
+                SendMessageW(g_hSearchString, WM_SETTEXT, 0, (LPARAM)(g_SearchString).c_str());
+
+                // Set the cursor to the end of the text
+                SendMessageW(g_hSearchString, EM_SETSEL, (WPARAM)g_SearchString.size(), (LPARAM)g_SearchString.size());
+                return 0;
+            }
+
+            // Let default handler update text first
+            LRESULT result = isChar ? 0 : DefSubclassProc(hWnd, uMsg, wParam, lParam);
+
+            // Invalidate to trigger repaint
+            InvalidateRect(hWnd, nullptr, TRUE);
+
+            return result;
+        }
+        // AT_LOG_INFO("Not handled: wParam: %0#4x, iswprint: %d", wParam, iswprint((wint_t)wParam));
+    } break;
+
+
+#if 0
+    // NOTE: Already handled in WM_KEYDOWN above.
+    // ----------------------------------------------------------------------------
+    // WM_CHAR
+    // ----------------------------------------------------------------------------
+    case WM_CHAR: {
+        AT_LOG_INFO("WM_CHAR: wParam = 0x%02X", (unsigned int)wParam);
+        const wchar_t ch = (wchar_t)wParam;
+        // Handle character input for search functionality
+        if (!(ch == '`' || ch == VK_TAB || ch == VK_DELETE)) {
+            // Let the default handler process the character input
+            LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
+
+            // After processing the character, update the search filter
+            wchar_t searchString[_MAX_PATH] = { 0 };
+            GetWindowTextW(g_hSearchString, searchString, _MAX_PATH);
+            g_SearchString = searchString;
+            return result;
+        }
+        return 0; // Ignore other characters
+    } break;
+#endif // 0
+
+#if 0
+    // Last key is not getting cleared in AltTab window mode.
+    // First WM_KEYDOWN is sent then WM_PAINT.
+    case WM_PAINT: {
+        AT_LOG_INFO("WM_PAINT");
+        //  Draw search icon inside the edit control
+        PAINTSTRUCT ps;
+        HDC hdc = BeginPaint(hWnd, &ps);
+
+        // Draw background & text
+        DefSubclassProc(hWnd, uMsg, wParam, lParam);
+
+        // Get the dimensions of the edit control
+        RECT rcClient;
+        GetClientRect(hWnd, &rcClient);
+        const int iconSize = 16;
+        const int x = rcClient.right - iconSize - 6;    // Padding from right
+        const int y = (rcClient.bottom - iconSize) / 2; // vertically centered
+        ImageList_DrawEx(
+            g_hImageList16, g_nImgSearchInd, hdc, x, y, iconSize, iconSize, CLR_NONE, CLR_NONE, ILD_NORMAL);
+
+        EndPaint(hWnd, &ps);
+
+        return 0;
+    } break;
+#endif // 0
+
+    case WM_NOTIFY: {
+        AT_LOG_INFO("WM_NOTIFY");
+        //LPNMHDR nmhdr = reinterpret_cast<LPNMHDR>(lParam);
+        //if (nmhdr->code == LVN_ITEMCHANGED) {
+        //    LPNMLISTVIEW pnmListView = reinterpret_cast<LPNMLISTVIEW>(nmhdr);
+
+        //    if ((pnmListView->uChanged & LVIF_STATE) && (pnmListView->uNewState & LVIS_SELECTED)) {
+        //        // The mouse has moved over the item
+        //        // You can show a message or perform any action here
+        //        MessageBox(hListView, L"Mouse moved over item!", L"ListView Notification", MB_OK | MB_ICONINFORMATION);
+        //    }
+        //}
+    } break;
+    }
+
+    return DefSubclassProc(hWnd, uMsg, wParam, lParam);
+}
+
 LRESULT CALLBACK ListViewSubclassProc(
     HWND       hListView,
     UINT       uMsg,
@@ -1082,6 +1364,9 @@ LRESULT CALLBACK ListViewSubclassProc(
         // Ignore Backtick (`), Tab, Backspace, and non-printable characters while forming search string.
         // ----------------------------------------------------------------------------
         else {
+            // No need to handle anything here.
+#if 0
+            AT_LOG_WARN("Shouldn't come to here: WM_KEYDOWN/WM_SYSKEYDOWN: wParam = 0x%02X", (unsigned int)wParam);
             wchar_t ch = '\0';
             bool isChar = ATMapVirtualKey((UINT)wParam, ch);
             bool update = false;
@@ -1093,7 +1378,8 @@ LRESULT CALLBACK ListViewSubclassProc(
                 update = true;
             }
             AT_LOG_INFO("Char: %#4x, SearchString: [%s]", ch, WStrToUTF8(g_SearchString).c_str());
-            update&& SendMessageW(g_hStaticText, WM_SETTEXT, 0, (LPARAM)(L"Search String: " + g_SearchString).c_str());
+            update && SendMessageW(g_hSearchString, WM_SETTEXT, 0, (LPARAM)g_SearchString.c_str());
+#endif // 0
         }
         // AT_LOG_INFO("Not handled: wParam: %0#4x, iswprint: %d", wParam, iswprint((wint_t)wParam));
     } break;
@@ -1110,6 +1396,31 @@ LRESULT CALLBACK ListViewSubclassProc(
         //        MessageBox(hListView, L"Mouse moved over item!", L"ListView Notification", MB_OK | MB_ICONINFORMATION);
         //    }
         //}
+    } break;
+
+    case WM_MOUSEMOVE: {
+        //AT_LOG_INFO("WM_MOUSEMOVE");
+        // Track mouse leave event
+        TRACKMOUSEEVENT tme;
+        tme.cbSize    = sizeof(tme);
+        tme.dwFlags   = TME_LEAVE;
+        tme.hwndTrack = hListView;
+        TrackMouseEvent(&tme);
+    } break;
+
+    case WM_MOUSELEAVE: {
+        //AT_LOG_INFO("WM_MOUSELEAVE");
+        // Hide the tooltip when the mouse leaves the ListView
+        if (g_Settings.ShowProcessInfoTooltip) {
+            HideCustomToolTip();
+
+            // Reset the hovered item index and hot item index
+            g_MouseHoverIndex = -1;
+            g_nLVHotItem      = -1;
+
+            // Invalidate the ListView to remove any highlighting
+            InvalidateRect(hListView, nullptr, TRUE);
+        }
     } break;
 
     // ----------------------------------------------------------------------------
@@ -1154,6 +1465,7 @@ INT_PTR CALLBACK AltTabWindowProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lP
         HANDLE_MSG(hWnd, WM_COMMAND       , ATW_OnCommand       );
         HANDLE_MSG(hWnd, WM_CONTEXTMENU   , ATW_OnContextMenu   );
         HANDLE_MSG(hWnd, WM_CREATE        , ATW_OnCreate        );
+        HANDLE_MSG(hWnd, WM_CTLCOLOREDIT  , ATW_OnCtlColorEdit  );
         HANDLE_MSG(hWnd, WM_CTLCOLORSTATIC, ATW_OnCtlColorStatic);
         HANDLE_MSG(hWnd, WM_DESTROY       , ATW_OnDestroy       );
         HANDLE_MSG(hWnd, WM_DRAWITEM      , ATW_OnDrawItem      );
@@ -1277,7 +1589,7 @@ void ShowContextMenu(HWND hWnd, POINT pt) {
 void SetAltTabActiveWindow() {
     SetForegroundWindow(g_hAltTabWnd);
     SetActiveWindow(g_hAltTabWnd);
-    SetFocus(g_hListView);
+    SetFocus(g_hSearchString);
 }
 
 void CopyToClipboard(const std::wstring& text) {
@@ -1649,7 +1961,7 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
     }
 
     // Create Static control for the search string
-    int staticTextHeight = 24;
+    int searchStringHeight = 24;
 
     // Calculate the required height for the static control based on font size
     HDC hdc = GetDC(hWnd);
@@ -1661,7 +1973,8 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
 
     TEXTMETRIC tm;
     GetTextMetrics(hdc, &tm);
-    staticTextHeight = (int)(tm.tmHeight + tm.tmExternalLeading + 1);
+    searchStringHeight = (int)(tm.tmHeight + tm.tmExternalLeading);
+    AT_LOG_INFO("searchStringHeight: %d", searchStringHeight);
 
     // Get the DPI of the window/screen
     int dpi = GetDeviceCaps(hdc, LOGPIXELSX);
@@ -1671,39 +1984,49 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
     // While creating static search string control, use 0 for height and
     // use -1 for the rest of the calculations while adjusting window size.
     if (!g_Settings.ShowSearchString) {
-        staticTextHeight = 0;
+        searchStringHeight = 0;
     }
 
     int X = 0;
     int Y = 0;
     int width = windowWidth;
-    int height = staticTextHeight;
+    int height = searchStringHeight;
 
-    // AT_LOG_INFO("StaticTextControl: X: %d, Y: %d, width: %d, height: %d", X, Y, width, height);
+    const DWORD searchStringTextStyles = WS_CHILD | WS_VISIBLE | WS_TABSTOP | ES_CENTER;
 
-    // Create a static text control
-    HWND hStaticText = CreateWindowW(
-        L"Static",                         // Static text control class
-        L"Search String: empty",           // Text content
-        WS_CHILD | WS_VISIBLE | SS_CENTER, // Styles
+    // Create a search string edit control
+    HWND hSearchString = CreateWindowW(
+        WC_EDIT,                           // Edit control class
+        L"",                               // Text content
+        searchStringTextStyles,            // Styles
         X,                                 // X
         Y,                                 // Y
         width,                             // Width
         height,                            // Height
         hWnd,                              // Parent window
-        (HMENU) nullptr,                   // Menu or control ID (set to NULL for static text)
+        (HMENU)IDC_ALTTAB_EDIT,            // Menu or control ID
         g_hInstance,                       // Instance handle
         nullptr                            // No window creation data
     );
 
-    SendMessageW(hStaticText, WM_SETFONT, (WPARAM)g_hSSFont, 0);
-    g_hStaticText = hStaticText;
+    SendMessageW(hSearchString, WM_SETFONT, (WPARAM)g_hSSFont, TRUE);
+    g_hSearchString = hSearchString;
+
+    // Add cue banner (placeholder text) to the edit control
+    // Get the cue banner text from resources
+    wchar_t cueBannerText[_MAX_PATH];
+    LoadStringW(g_hInstance, IDS_EDIT_CUE_BANNER_TEXT, cueBannerText, 256);
+
+    SendMessageW(hSearchString, EM_SETCUEBANNER, (WPARAM)TRUE, (LPARAM)cueBannerText);
+
+    // Subclass the edit control
+    SetWindowSubclass(hSearchString, SearchStringSubclassProc, 1, 0);
 
     // Here adding 1 pixel to the Y position to avoid the static text control overlap with the ListView control
     if (g_Settings.ShowSearchString) {
-        Y += staticTextHeight;
+        Y += searchStringHeight;
     } else {
-        staticTextHeight = -1;
+        searchStringHeight = -1;
     }
 
     // Here, reducing the window width by 1 (-1) to fit the scrollbar properly in the window.
@@ -1711,7 +2034,7 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
     //  1 pixel for the static text control and listView control overlap
     //  2 pixels for the upper and bottom border in listview control
     width = windowWidth - 1;
-    height = windowHeight - staticTextHeight - 3;
+    height = windowHeight - searchStringHeight - 3;
 
     // AT_LOG_INFO("ListViewControl: X: %d, Y: %d, width: %d, height: %d", X, Y, width, height);
 
@@ -1731,16 +2054,17 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
         nullptr              // No window creation data
     );
 
-    SendMessageW(hListView, WM_SETFONT, (WPARAM)g_hLVFont, MAKELPARAM(TRUE, 0));
     g_hListView = hListView;
+
+    SendMessageW(hListView, WM_SETFONT, (WPARAM)g_hLVFont, MAKELPARAM(TRUE, 0));
 
     // Subclass the ListView control
     SetWindowSubclass(hListView, ListViewSubclassProc, 1, 0);
 
-    int wndWidth = (int)(screenWidth * g_Settings.WidthPercentage * 0.01);
-    int wndHeight = (int)(screenHeight * g_Settings.HeightPercentage * 0.01);
+    const int wndWidth  = (int)(screenWidth * g_Settings.WidthPercentage * 0.01);
+    const int wndHeight = (int)(screenHeight * g_Settings.HeightPercentage * 0.01);
 
-    g_Settings.WindowWidth = wndWidth;
+    g_Settings.WindowWidth  = wndWidth;
     g_Settings.WindowHeight = wndHeight;
 
     // Add header / columns
@@ -1808,7 +2132,7 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
     const int itemHeight =
         ListView_GetItemRect(g_hListView, 0, &rcListView, LVIR_BOUNDS) ? rcListView.bottom - rcListView.top : 0;
     const int itemCount = ListView_GetItemCount(g_hListView);
-    int requiredHeight = itemHeight * itemCount + headerHeight + staticTextHeight + 2;
+    int requiredHeight = itemHeight * itemCount + headerHeight + searchStringHeight + 2;
 
     if (requiredHeight <= g_Settings.WindowHeight) {
         SetWindowPos(hWnd, HWND_TOPMOST, windowX, windowY, windowWidth, requiredHeight, SWP_NOZORDER);
@@ -1820,7 +2144,7 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
         const int numberOfVisibleItems = (g_Settings.WindowHeight - itemHeight + 1) / itemHeight;
         const int lvHeight             = numberOfVisibleItems * itemHeight + headerHeight;
 
-        requiredHeight = lvHeight + staticTextHeight + 2;
+        requiredHeight = lvHeight + searchStringHeight + 2;
 
         ListView_SetColumnWidth(hListView, 1, colTitleWidth);
 
@@ -1831,7 +2155,7 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
     }
 
     SetForegroundWindow(hWnd);
-    SetFocus(hListView);
+    SetFocus(hSearchString);
 
     // Select the first row
     LVITEM lvItem;
@@ -1845,9 +2169,21 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
     return TRUE;
 }
 
+LRESULT ATW_OnCtlColorEdit(HWND hWnd, HDC hDC, HWND hCtl, UINT /*type*/) {
+    AT_LOG_TRACE;
+    if (hCtl == g_hSearchString) {
+        // Set the text color and background color of the edit control
+        SetTextColor(hDC, g_Settings.SSFontColor);
+        SetBkColor(hDC, g_Settings.SSBackgroundColor);
+
+        return (INT_PTR)CreateSolidBrush(g_Settings.SSBackgroundColor);
+    }
+    return DefWindowProc(hWnd, WM_CTLCOLOREDIT, (WPARAM)hDC, (LPARAM)hCtl);
+}
+
 LRESULT ATW_OnCtlColorStatic(HWND hWnd, HDC hDC, HWND hCtl, UINT /*type*/) {
     AT_LOG_TRACE;
-    if (hCtl == g_hStaticText) {
+    if (hCtl == g_hSearchString) {
         // Set the text color and background color of the static text control
         SetTextColor(hDC, g_Settings.SSFontColor);
         SetBkColor(hDC, g_Settings.SSBackgroundColor);

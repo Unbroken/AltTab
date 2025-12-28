@@ -7,3 +7,4 @@ Releases/
 *.7z
 /source/*.aps
 IntermediateFiles/
+/Scripts/__pycache__
