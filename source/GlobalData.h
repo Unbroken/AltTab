@@ -30,7 +30,7 @@ extern HWND                                 g_hMainWnd;              // AltTab m
 extern HWND                                 g_hSettingsWnd;          // AltTab settings window handle
 extern HWND                                 g_hAltTabWnd;            // AltTab window handle
 extern HWND                                 g_hFGWnd;                // Foreground window handle
-extern HWND                                 g_hStaticText;
+extern HWND                                 g_hSearchString;
 extern HWND                                 g_hListView;
 extern int                                  g_nLVHotItem;
 extern HWND                                 g_hToolTip;

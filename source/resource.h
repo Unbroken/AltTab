@@ -6,6 +6,7 @@
 #define IDS_APP_TITLE                   103
 #define IDD_ABOUTBOX                    103
 #define IDM_ABOUT                       104
+#define IDS_EDIT_CUE_BANNER_TEXT        104
 #define IDM_EXIT                        105
 #define IDI_ALTTAB                      107
 #define IDC_ALTTAB                      109
@@ -18,6 +19,7 @@
 #define IDB_PNG_CLOSE_WINDOW_INACTIVE   134
 #define IDC_LISTVIEW                    1001
 #define IDC_SYSLINK_COPYRIGHT           1002
+#define IDC_ALTTAB_EDIT                 1003
 #define IDC_EDIT_SETTINGS_FILEPATH      1005
 #define IDC_EDIT_SIMILAR_PROCESS_GROUPS 1006
 #define IDC_EDIT_PROCESS_EXCLUSIONS     1007

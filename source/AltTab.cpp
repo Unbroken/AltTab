@@ -547,7 +547,15 @@ LRESULT CALLBACK LLKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     PostMessage(g_hListView, WM_KEYDOWN, vkCode, 0);
                     return TRUE;
                 }
-                
+
+                // This is exceptional case to handle Alt + Space
+                // `PowerToys` also uses `Alt + Space` hotkey. So, prevent this hotkey while AltTab window is open.
+                // If we do not prevent this, AltTab window will be closed and PowerToys Run window will be opened.
+                if (vkCode == VK_SPACE /* Space */) {
+                    PostMessageW(g_hSearchString, WM_KEYDOWN, vkCode, 0);
+                    return TRUE;
+                }
+
                 if (vkCode == VK_F4) {
                     // DO NOT DESTROY ALT TAB
                     return TRUE;
@@ -563,13 +571,15 @@ LRESULT CALLBACK LLKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
         }
     } // if (isAltPressed || g_hAltTabWnd != nullptr)
 
+#if 0
     // This is exceptional case to handle Alt + Space
-    // `PowerToys` also uses `Alt + Space` this hotkey. So, prevent this hotkey while AltTab window is open.
+    // `PowerToys` also uses `Alt + Space` hotkey. So, prevent this hotkey while AltTab window is open.
     // If we do not prevent this, AltTab window will be closed and PowerToys Run window will be opened.
-    if (g_hAltTabWnd != nullptr && vkCode == 32 /* Space */) {
-         PostMessageW(g_hListView, WM_KEYDOWN, vkCode, 0);
+    if (g_hAltTabWnd != nullptr && vkCode == VK_SPACE /* Space */) {
+         PostMessageW(g_hSearchString, WM_KEYDOWN, vkCode, 0);
          return TRUE;
     }
+#endif // 0
 
     //AT_LOG_DEBUG("CallNextHookEx(g_KeyboardHook, nCode, wParam, lParam);");
     return CallNextHookEx(g_KeyboardHook, nCode, wParam, lParam);
