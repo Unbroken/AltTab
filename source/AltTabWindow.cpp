@@ -1413,14 +1413,14 @@ LRESULT CALLBACK ListViewSubclassProc(
         // Hide the tooltip when the mouse leaves the ListView
         if (g_Settings.ShowProcessInfoTooltip) {
             HideCustomToolTip();
-
-            // Reset the hovered item index and hot item index
-            g_MouseHoverIndex = -1;
-            g_nLVHotItem      = -1;
-
-            // Invalidate the ListView to remove any highlighting
-            InvalidateRect(hListView, nullptr, TRUE);
         }
+
+        // Reset the hovered item index and hot item index
+        g_MouseHoverIndex = -1;
+        g_nLVHotItem = -1;
+
+        // Invalidate the ListView to remove any highlighting
+        InvalidateRect(hListView, nullptr, TRUE);
     } break;
 
     // ----------------------------------------------------------------------------
