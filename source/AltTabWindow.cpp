@@ -938,7 +938,7 @@ LRESULT CALLBACK SearchStringSubclassProc(
     switch (uMsg) {
     case WM_KEYDOWN:
     case WM_SYSKEYDOWN: {
-        AT_LOG_INFO("WM_KEYDOWN/WM_SYSKEYDOWN: wParam = 0x%02X", (unsigned int)wParam);
+        //AT_LOG_INFO("WM_KEYDOWN/WM_SYSKEYDOWN: wParam = 0x%02X", (unsigned int)wParam);
         // ----------------------------------------------------------------------------
         // VK_ESCAPE
         // ----------------------------------------------------------------------------
@@ -1104,7 +1104,7 @@ LRESULT CALLBACK SearchStringSubclassProc(
                 g_SearchString.pop_back();
                 update = true;
             }
-            AT_LOG_INFO("IsChar, %d, Update: %d, Char: %#4x, SearchString: [%s], Len(SearchString): %d", isChar, update, ch, WStrToUTF8(g_SearchString).c_str(), (int)g_SearchString.size());
+            //AT_LOG_INFO("IsChar, %d, Update: %d, Char: %#4x, SearchString: [%s], Len(SearchString): %d", isChar, update, ch, WStrToUTF8(g_SearchString).c_str(), (int)g_SearchString.size());
 
             if (update) {
                 SendMessageW(g_hSearchString, WM_SETTEXT, 0, (LPARAM)(g_SearchString).c_str());
@@ -1125,17 +1125,26 @@ LRESULT CALLBACK SearchStringSubclassProc(
         // AT_LOG_INFO("Not handled: wParam: %0#4x, iswprint: %d", wParam, iswprint((wint_t)wParam));
     } break;
 
+    // Show the application tray menu on right click / context menu request
+    case WM_CONTEXTMENU: {
+        AT_LOG_INFO("WM_CONTEXTMENU");
+        POINT pt;
+        GetCursorPos(&pt);
+        ShowTrayContextMenu(g_hAltTabWnd, pt);
 
-#if 0
-    // NOTE: Already handled in WM_KEYDOWN above.
+        // Close the AltTab window after showing the context menu and handling the menu command.
+        DestroyAltTabWindow();
+        return 0;
+    } break;
+
     // ----------------------------------------------------------------------------
-    // WM_CHAR
+    // WM_CHAR, NOTE: This is also needed to handle character input when ALT is not pressed. Ex: Alt+Ctrl+Tab
     // ----------------------------------------------------------------------------
     case WM_CHAR: {
         AT_LOG_INFO("WM_CHAR: wParam = 0x%02X", (unsigned int)wParam);
         const wchar_t ch = (wchar_t)wParam;
         // Handle character input for search functionality
-        if (!(ch == '`' || ch == VK_TAB || ch == VK_DELETE)) {
+        if (!(ch == '`' || ch == VK_TAB || ch == VK_DELETE || ch == VK_SPACE || ch == '\0')) {
             // Let the default handler process the character input
             LRESULT result = DefSubclassProc(hWnd, uMsg, wParam, lParam);
 
@@ -1147,7 +1156,6 @@ LRESULT CALLBACK SearchStringSubclassProc(
         }
         return 0; // Ignore other characters
     } break;
-#endif // 0
 
 #if 0
     // Last key is not getting cleared in AltTab window mode.
@@ -2252,6 +2260,8 @@ void ATW_OnLButtonDown(HWND /*hwnd*/, BOOL /*fDoubleClick*/, int /*x*/, int /*y*
 
 void ATW_OnTimer(HWND /*hwnd*/, UINT /*id*/) {
     //AT_LOG_TRACE;
+    if (!g_SearchString.empty())
+        AT_LOG_DEBUG("g_SearchString: [%ls]", g_SearchString.c_str());
     std::vector<AltTabWindowData> altTabWindows;
     EnumWindows(EnumWindowsProc, (LPARAM)(&altTabWindows));
     // AT_LOG_INFO("altTabWindows.size(): %d, g_AltTabWindows.size(): %d", altTabWindows.size(),
