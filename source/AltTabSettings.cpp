@@ -70,6 +70,7 @@ void AltTabSettings::Reset() {
     HKAltTabEnabled          = DEFAULT_ALT_TAB_ENABLED;
     HKAltBacktickEnabled     = DEFAULT_ALT_BACKTICK_ENABLED;
     HKAltCtrlTabEnabled      = DEFAULT_ALT_CTRL_TAB_ENABLED;
+    SSCueBannerText          = DEFAULT_SS_CUE_BANNER_TEXT;
     SSFontName               = DEFAULT_SS_FONT_NAME;
     SSFontSize               = DEFAULT_SS_FONT_SIZE;
     SSFontStyle              = DEFAULT_SS_FONT_STYLE;
@@ -481,6 +482,7 @@ void ATSettingsToFile(const std::wstring& iniFile) {
     WriteSetting(iniFile, L"Hotkeys"          , L"AltTabEnabled"         , g_Settings.HKAltTabEnabled         );
     WriteSetting(iniFile, L"Hotkeys"          , L"AltBacktickEnabled"    , g_Settings.HKAltBacktickEnabled    );
     WriteSetting(iniFile, L"Hotkeys"          , L"AltCtrlTabEnabled"     , g_Settings.HKAltCtrlTabEnabled     );
+    WriteSetting(iniFile, L"SearchString"     , L"CueBannerText"         , g_Settings.SSCueBannerText         );
     WriteSetting(iniFile, L"SearchString"     , L"FontName"              , g_Settings.SSFontName              );
     WriteSetting(iniFile, L"SearchString"     , L"FontSize"              , g_Settings.SSFontSize              );
     WriteSetting(iniFile, L"SearchString"     , L"FontStyle"             , g_Settings.SSFontStyle             );
@@ -522,6 +524,7 @@ void ATLoadSettings() {
     ReadSetting(iniFile, L"Hotkeys"          , L"AltTabEnabled"         , DEFAULT_ALT_TAB_ENABLED           , g_Settings.HKAltTabEnabled         );
     ReadSetting(iniFile, L"Hotkeys"          , L"AltBacktickEnabled"    , DEFAULT_ALT_BACKTICK_ENABLED      , g_Settings.HKAltBacktickEnabled    );
     ReadSetting(iniFile, L"Hotkeys"          , L"AltCtrlTabEnabled"     , DEFAULT_ALT_CTRL_TAB_ENABLED      , g_Settings.HKAltCtrlTabEnabled     );
+    ReadSetting(iniFile, L"SearchString"     , L"CueBannerText"         , DEFAULT_SS_CUE_BANNER_TEXT        , g_Settings.SSCueBannerText         );
     ReadSetting(iniFile, L"SearchString"     , L"FontName"              , DEFAULT_SS_FONT_NAME              , g_Settings.SSFontName              );
     ReadSetting(iniFile, L"SearchString"     , L"FontSize"              , DEFAULT_SS_FONT_SIZE              , g_Settings.SSFontSize              );
     ReadSetting(iniFile, L"SearchString"     , L"FontStyle"             , DEFAULT_SS_FONT_STYLE             , g_Settings.SSFontStyle             );
@@ -682,6 +685,7 @@ void ATLogSettings(const AltTabSettings& settings) {
     AT_LOG_DEBUG("  HKAltBacktickEnabled    : [%s]", BOOL_TO_CSTR(settings.HKAltBacktickEnabled));
     AT_LOG_DEBUG("  HKAltCtrlTabEnabled     : [%s]", BOOL_TO_CSTR(settings.HKAltCtrlTabEnabled));
     AT_LOG_DEBUG("[SearchString]");
+    AT_LOG_DEBUG("  SSCueBannerText         : [%s]", WStrToUTF8(settings.SSCueBannerText).c_str());
     AT_LOG_DEBUG("  SSFontName              : [%s]", WStrToUTF8(settings.SSFontName).c_str());
     AT_LOG_DEBUG("  SSFontSize              : [%d]", settings.SSFontSize);
     AT_LOG_DEBUG("  SSFontStyle             : [%s]", WStrToUTF8(settings.SSFontStyle).c_str());
