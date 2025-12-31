@@ -42,6 +42,8 @@ const wchar_t* TT_CHECK_FOR_UPDATES            = LR"(How frequently check for up
 
 const wchar_t* TT_PROMPT_TERMINATE_ALL         = LR"(Prompts for confirmation before terminating a window/process)";
 
+const wchar_t* TT_SHOW_SS_CUE_BANNER_TEXT      = LR"(Default banner text displayed in search string text control when it is empty)";
+
 const wchar_t* TT_SHOW_SEARCH_STRING           = LR"(Show/hide search string control in AltTab window)";
 
 const wchar_t* TT_SHOW_COLUMN_HEADER           = LR"(Show/hide column header of AltTab window listview)";
@@ -49,6 +51,10 @@ const wchar_t* TT_SHOW_COLUMN_HEADER           = LR"(Show/hide column header of 
 const wchar_t* TT_SHOW_COLUMN_PROCESS_NAME     = LR"(Show/hide process name column in AltTab window listview)";
 
 const wchar_t* TT_SHOW_PROCESSINFO_TOOLTIP     = LR"(Show process information (Path & PID) tooltip in AltTab window listview)";
+
+const wchar_t* TT_SHOW_MOUSEOVER_ITEM          = LR"(Draw a rectangle around mouse over hot-track item in AltTab window listview)";
+
+const wchar_t* TT_SHOW_DELETE_BUTTON           = LR"(Display delete button on mouse over hot-track item in AltTab window listview)";
 
 const wchar_t* TT_CHECK_PROCESS_EXCLUSIONS     = LR"(Enable/disable process exclusions)";
 

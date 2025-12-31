@@ -37,6 +37,43 @@ void AddTooltips         (HWND hDlg);
 void ATLogSettings       (const AltTabSettings& settings);
 
 namespace {
+    // Sections
+    const wchar_t* SEARCH_STRING             = L"SearchString"          ;
+    const wchar_t* LIST_VIEW                 = L"ListView"              ;
+    const wchar_t* GENERAL                   = L"General"               ;
+    const wchar_t* HOTKEYS                   = L"Hotkeys"               ;
+    const wchar_t* MOUSE_HOVER               = L"MouseHover"            ;
+    const wchar_t* BACKTICK                  = L"Backtick"              ;
+    const wchar_t* PROCESS_EXCLUSIONS        = L"ProcessExclusions"     ;
+
+    const wchar_t* CUE_BANNER_TEXT           = L"CueBannerText"         ;
+    const wchar_t* FONT_NAME                 = L"FontName"              ;
+    const wchar_t* FONT_SIZE                 = L"FontSize"              ;
+    const wchar_t* FONT_STYLE                = L"FontStyle"             ;
+    const wchar_t* FONT_COLOR                = L"FontColor"             ;
+    const wchar_t* BACKGROUND_COLOR          = L"BackgroundColor"       ;
+
+    const wchar_t* PROMPT_TERMINATE_ALL      = L"PromptTerminateAll"    ;
+    const wchar_t* FUZZY_MATCH_PERCENT       = L"FuzzyMatchPercent"     ;
+    const wchar_t* WINDOW_TRANSPARENCY       = L"WindowTransparency"    ;
+    const wchar_t* WINDOW_WIDTH_PERCENTAGE   = L"WindowWidthPercentage" ;
+    const wchar_t* WINDOW_HEIGHT_PERCENTAGE  = L"WindowHeightPercentage";
+    const wchar_t* SHOW_SEARCH_STRING        = L"ShowSearchString"      ;
+    const wchar_t* SHOW_COL_HEADER           = L"ShowColHeader"         ;
+    const wchar_t* SHOW_COL_PROCESSNAME      = L"ShowColProcessName"    ;
+    const wchar_t* SHOW_PROCESS_INFO_TOOLTIP = L"ShowProcessInfoTooltip";
+    const wchar_t* SHOW_HIGHLIGHT_RECT       = L"ShowHighlightRect";
+    const wchar_t* SHOW_DELETE_BUTTON        = L"ShowDeleteButton";
+
+    const wchar_t* CHECK_FOR_UPDATES         = L"CheckForUpdates"       ;
+    const wchar_t* SYSTEM_TRAY_ICON_ENABLED  = L"SystemTrayIconEnabled" ;
+    const wchar_t* ALTTAB_ENABLED            = L"AltTabEnabled"         ;
+    const wchar_t* ALTBACKTICK_ENABLED       = L"AltBacktickEnabled"    ;
+    const wchar_t* ALTCTRLTAB_ENABLED        = L"AltCtrlTabEnabled"     ;
+    const wchar_t* SIMILAR_PROCESS_GROUPS    = L"SimilarProcessGroups"  ;
+    const wchar_t* ENABLED                   = L"Enabled"               ;
+    const wchar_t* PROCESS_LIST              = L"ProcessList"           ;
+
     // Convert COLORREF to 0xRRGGBB format
     std::wstring ColorRefToRGBString(COLORREF colorRef) {
         wchar_t buffer[9]; // Format: 0xRRGGBB\0
@@ -92,7 +129,7 @@ void AltTabSettings::Reset() {
     ShowSearchString         = DEFAULT_SHOW_SEARCH_STRING;
     ShowColHeader            = DEFAULT_SHOW_COL_HEADER;
     ShowColProcessName       = DEFAULT_SHOW_COL_PROCESSNAME;
-    ShowProcessInfoTooltip   = DEFAULT_SHOW_PROCESSINFO_TOOLTIP;
+    ShowProcessInfoTooltip   = DEFAULT_MH_SHOW_PROCESSINFO_TOOLTIP;
     SystemTrayIconEnabled    = DEFAULT_SYSTEM_TRAY_ICON_ENABLED;
     ProcessExclusionsEnabled = DEFAULT_PROCESS_EXCLUSIONS_ENABLED;
     ProcessExclusions        = DEFAULT_PROCESS_EXCLUSIONS;
@@ -171,29 +208,32 @@ void AddTooltips(HWND hDlg) {
     // TODO: Not working
     SendMessageW(g_hToolTip, TTM_SETTIPBKCOLOR, RGB(255, 255, 0), 0);
 
-    ADD_TOOLTIP(IDC_CHECK_ALT_TAB                 , TT_HOTKEY_ALT_TAB            );
-    ADD_TOOLTIP(IDC_CHECK_ALT_BACKTICK            , TT_HOTKEY_ALT_BACKTICK       );
-    ADD_TOOLTIP(IDC_CHECK_ALT_CTRL_TAB            , TT_HOTKEY_ALT_CTRL_TAB       );
-    ADD_TOOLTIP(IDC_EDIT_SETTINGS_FILEPATH        , TT_SETTINGS_FILEPATH         );
-    ADD_TOOLTIP(IDC_EDIT_SIMILAR_PROCESS_GROUPS   , TT_SIMILAR_PROCESS_GROUPS    );
-    ADD_TOOLTIP(IDC_EDIT_FUZZY_MATCH_PERCENT      , TT_FUZZY_MATCH_PERCENT       );
-    ADD_TOOLTIP(IDC_STATIC_FUZZY_MATCH_PERCENT    , TT_FUZZY_MATCH_PERCENT       ); // TODO: Not working for static controls
-    ADD_TOOLTIP(IDC_EDIT_WINDOW_TRANSPARENCY      , TT_WINDOW_TRANSPARENCY       );
-    ADD_TOOLTIP(IDC_EDIT_WINDOW_WIDTH_PERCENTAGE  , TT_WINDOW_WIDTH_PERCENT      );
-    ADD_TOOLTIP(IDC_EDIT_WINDOW_HEIGHT_PERCENTAGE , TT_WINDOW_HEIGHT_PERCENT     );
-    ADD_TOOLTIP(IDC_CHECK_PROMPT_TERMINATE_ALL    , TT_PROMPT_TERMINATE_ALL      );
-    ADD_TOOLTIP(IDC_CHECK_SHOW_SEARCH_STRING      , TT_SHOW_SEARCH_STRING        );
-    ADD_TOOLTIP(IDC_CHECK_SHOW_COL_HEADER         , TT_SHOW_COLUMN_HEADER        );
-    ADD_TOOLTIP(IDC_CHECK_SHOW_COL_PROCESSNAME    , TT_SHOW_COLUMN_PROCESS_NAME  );
-    ADD_TOOLTIP(IDC_CHECK_SHOW_PROCESSINFO_TOOLTIP, TT_SHOW_PROCESSINFO_TOOLTIP  );
-    ADD_TOOLTIP(IDC_CHECK_FOR_UPDATES             , TT_CHECK_FOR_UPDATES         );
-    ADD_TOOLTIP(IDC_CHECK_PROCESS_EXCLUSIONS      , TT_CHECK_PROCESS_EXCLUSIONS  );
-    ADD_TOOLTIP(IDC_EDIT_PROCESS_EXCLUSIONS       , TT_EDIT_PROCESS_EXCLUSIONS   );
-    ADD_TOOLTIP(IDC_BUTTON_APPLY                  , TT_APPLY_SETTINGS            );
-    ADD_TOOLTIP(IDOK                              , TT_OK_SETTINGS               );
-    ADD_TOOLTIP(IDCANCEL                          , TT_CANCEL_SETTINGS           );
-    ADD_TOOLTIP(IDC_BUTTON_RESET                  , TT_RESET_SETTINGS            );
-    ADD_TOOLTIP(IDC_BUTTON_RELOAD                 , TT_RELOAD_SETTINGS           );
+    ADD_TOOLTIP(IDC_CHECK_ALT_TAB                    , TT_HOTKEY_ALT_TAB            );
+    ADD_TOOLTIP(IDC_CHECK_ALT_BACKTICK               , TT_HOTKEY_ALT_BACKTICK       );
+    ADD_TOOLTIP(IDC_CHECK_ALT_CTRL_TAB               , TT_HOTKEY_ALT_CTRL_TAB       );
+    ADD_TOOLTIP(IDC_EDIT_SETTINGS_FILEPATH           , TT_SETTINGS_FILEPATH         );
+    ADD_TOOLTIP(IDC_EDIT_SS_BANNER_TEXT              , TT_SHOW_SS_CUE_BANNER_TEXT   );
+    ADD_TOOLTIP(IDC_EDIT_SIMILAR_PROCESS_GROUPS      , TT_SIMILAR_PROCESS_GROUPS    );
+    ADD_TOOLTIP(IDC_EDIT_FUZZY_MATCH_PERCENT         , TT_FUZZY_MATCH_PERCENT       );
+    ADD_TOOLTIP(IDC_STATIC_FUZZY_MATCH_PERCENT       , TT_FUZZY_MATCH_PERCENT       ); // TODO: Not working for static controls
+    ADD_TOOLTIP(IDC_EDIT_WINDOW_TRANSPARENCY         , TT_WINDOW_TRANSPARENCY       );
+    ADD_TOOLTIP(IDC_EDIT_WINDOW_WIDTH_PERCENTAGE     , TT_WINDOW_WIDTH_PERCENT      );
+    ADD_TOOLTIP(IDC_EDIT_WINDOW_HEIGHT_PERCENTAGE    , TT_WINDOW_HEIGHT_PERCENT     );
+    ADD_TOOLTIP(IDC_CHECK_PROMPT_TERMINATE_ALL       , TT_PROMPT_TERMINATE_ALL      );
+    ADD_TOOLTIP(IDC_CHECK_SHOW_SEARCH_STRING         , TT_SHOW_SEARCH_STRING        );
+    ADD_TOOLTIP(IDC_CHECK_SHOW_COL_HEADER            , TT_SHOW_COLUMN_HEADER        );
+    ADD_TOOLTIP(IDC_CHECK_SHOW_COL_PROCESSNAME       , TT_SHOW_COLUMN_PROCESS_NAME  );
+    ADD_TOOLTIP(IDC_CHECK_MH_SHOW_PROCESSINFO_TOOLTIP, TT_SHOW_PROCESSINFO_TOOLTIP  );
+    ADD_TOOLTIP(IDC_CHECK_MH_SHOW_HIGHLIGHT_RECT     , TT_SHOW_MOUSEOVER_ITEM       );
+    ADD_TOOLTIP(IDC_CHECK_MH_SHOW_DELETE_BUTTON      , TT_SHOW_DELETE_BUTTON        );
+    ADD_TOOLTIP(IDC_CHECK_FOR_UPDATES                , TT_CHECK_FOR_UPDATES         );
+    ADD_TOOLTIP(IDC_CHECK_PROCESS_EXCLUSIONS         , TT_CHECK_PROCESS_EXCLUSIONS  );
+    ADD_TOOLTIP(IDC_EDIT_PROCESS_EXCLUSIONS          , TT_EDIT_PROCESS_EXCLUSIONS   );
+    ADD_TOOLTIP(IDC_BUTTON_APPLY                     , TT_APPLY_SETTINGS            );
+    ADD_TOOLTIP(IDOK                                 , TT_OK_SETTINGS               );
+    ADD_TOOLTIP(IDCANCEL                             , TT_CANCEL_SETTINGS           );
+    ADD_TOOLTIP(IDC_BUTTON_RESET                     , TT_RESET_SETTINGS            );
+    ADD_TOOLTIP(IDC_BUTTON_RELOAD                    , TT_RELOAD_SETTINGS           );
 }
 
 // ----------------------------------------------------------------------------
@@ -474,39 +514,41 @@ void ReadSetting(const std::wstring& iniFile, LPCTSTR section, LPCTSTR keyName, 
  */
 void ATSettingsToFile(const std::wstring& iniFile) {
     // Convert color values to 0xRRGGBB string format and save in AltTabSettings.ini file
-    std::wstring SSFontColor       = ColorRefToRGBString(g_Settings.SSFontColor      );
-    std::wstring SSBackgroundColor = ColorRefToRGBString(g_Settings.SSBackgroundColor);
-    std::wstring LVFontColor       = ColorRefToRGBString(g_Settings.LVFontColor      );
-    std::wstring LVBackgroundColor = ColorRefToRGBString(g_Settings.LVBackgroundColor);
+    const std::wstring SSFontColor       = ColorRefToRGBString(g_Settings.SSFontColor      );
+    const std::wstring SSBackgroundColor = ColorRefToRGBString(g_Settings.SSBackgroundColor);
+    const std::wstring LVFontColor       = ColorRefToRGBString(g_Settings.LVFontColor      );
+    const std::wstring LVBackgroundColor = ColorRefToRGBString(g_Settings.LVBackgroundColor);
 
-    WriteSetting(iniFile, L"Hotkeys"          , L"AltTabEnabled"         , g_Settings.HKAltTabEnabled         );
-    WriteSetting(iniFile, L"Hotkeys"          , L"AltBacktickEnabled"    , g_Settings.HKAltBacktickEnabled    );
-    WriteSetting(iniFile, L"Hotkeys"          , L"AltCtrlTabEnabled"     , g_Settings.HKAltCtrlTabEnabled     );
-    WriteSetting(iniFile, L"SearchString"     , L"CueBannerText"         , g_Settings.SSCueBannerText         );
-    WriteSetting(iniFile, L"SearchString"     , L"FontName"              , g_Settings.SSFontName              );
-    WriteSetting(iniFile, L"SearchString"     , L"FontSize"              , g_Settings.SSFontSize              );
-    WriteSetting(iniFile, L"SearchString"     , L"FontStyle"             , g_Settings.SSFontStyle             );
-    WriteSetting(iniFile, L"SearchString"     , L"FontColor"             , SSFontColor                        );
-    WriteSetting(iniFile, L"SearchString"     , L"BackgroundColor"       , SSBackgroundColor                  );
-    WriteSetting(iniFile, L"ListView"         , L"FontName"              , g_Settings.LVFontName              );
-    WriteSetting(iniFile, L"ListView"         , L"FontSize"              , g_Settings.LVFontSize              );
-    WriteSetting(iniFile, L"ListView"         , L"FontStyle"             , g_Settings.LVFontStyle             );
-    WriteSetting(iniFile, L"ListView"         , L"FontColor"             , LVFontColor                        );
-    WriteSetting(iniFile, L"ListView"         , L"BackgroundColor"       , LVBackgroundColor                  );
-    WriteSetting(iniFile, L"General"          , L"PromptTerminateAll"    , g_Settings.PromptTerminateAll      );
-    WriteSetting(iniFile, L"General"          , L"FuzzyMatchPercent"     , g_Settings.FuzzyMatchPercent       );
-    WriteSetting(iniFile, L"General"          , L"WindowTransparency"    , g_Settings.Transparency            );
-    WriteSetting(iniFile, L"General"          , L"WindowWidthPercentage" , g_Settings.WidthPercentage         );
-    WriteSetting(iniFile, L"General"          , L"WindowHeightPercentage", g_Settings.HeightPercentage        );
-    WriteSetting(iniFile, L"General"          , L"ShowSearchString"      , g_Settings.ShowSearchString        );
-    WriteSetting(iniFile, L"General"          , L"ShowColHeader"         , g_Settings.ShowColHeader           );
-    WriteSetting(iniFile, L"General"          , L"ShowColProcessName"    , g_Settings.ShowColProcessName      );
-    WriteSetting(iniFile, L"General"          , L"ShowProcessInfoTooltip", g_Settings.ShowProcessInfoTooltip  );
-    WriteSetting(iniFile, L"General"          , L"CheckForUpdates"       , g_Settings.CheckForUpdatesOpt      );
-    WriteSetting(iniFile, L"General"          , L"SystemTrayIconEnabled" , g_Settings.SystemTrayIconEnabled   );
-    WriteSetting(iniFile, L"Backtick"         , L"SimilarProcessGroups"  , g_Settings.SimilarProcessGroups    );
-    WriteSetting(iniFile, L"ProcessExclusions", L"Enabled"               , g_Settings.ProcessExclusionsEnabled);
-    WriteSetting(iniFile, L"ProcessExclusions", L"ProcessList"           , g_Settings.ProcessExclusions       );
+    WriteSetting(iniFile, HOTKEYS           , ALTTAB_ENABLED           , g_Settings.HKAltTabEnabled         );
+    WriteSetting(iniFile, HOTKEYS           , ALTBACKTICK_ENABLED      , g_Settings.HKAltBacktickEnabled    );
+    WriteSetting(iniFile, HOTKEYS           , ALTCTRLTAB_ENABLED       , g_Settings.HKAltCtrlTabEnabled     );
+    WriteSetting(iniFile, SEARCH_STRING     , CUE_BANNER_TEXT          , g_Settings.SSCueBannerText         );
+    WriteSetting(iniFile, SEARCH_STRING     , FONT_NAME                , g_Settings.SSFontName              );
+    WriteSetting(iniFile, SEARCH_STRING     , FONT_SIZE                , g_Settings.SSFontSize              );
+    WriteSetting(iniFile, SEARCH_STRING     , FONT_STYLE               , g_Settings.SSFontStyle             );
+    WriteSetting(iniFile, SEARCH_STRING     , FONT_COLOR               , SSFontColor                        );
+    WriteSetting(iniFile, SEARCH_STRING     , BACKGROUND_COLOR         , SSBackgroundColor                  );
+    WriteSetting(iniFile, LIST_VIEW         , FONT_NAME                , g_Settings.LVFontName              );
+    WriteSetting(iniFile, LIST_VIEW         , FONT_SIZE                , g_Settings.LVFontSize              );
+    WriteSetting(iniFile, LIST_VIEW         , FONT_STYLE               , g_Settings.LVFontStyle             );
+    WriteSetting(iniFile, LIST_VIEW         , FONT_COLOR               , LVFontColor                        );
+    WriteSetting(iniFile, LIST_VIEW         , BACKGROUND_COLOR         , LVBackgroundColor                  );
+    WriteSetting(iniFile, GENERAL           , PROMPT_TERMINATE_ALL     , g_Settings.PromptTerminateAll      );
+    WriteSetting(iniFile, GENERAL           , FUZZY_MATCH_PERCENT      , g_Settings.FuzzyMatchPercent       );
+    WriteSetting(iniFile, GENERAL           , WINDOW_TRANSPARENCY      , g_Settings.Transparency            );
+    WriteSetting(iniFile, GENERAL           , WINDOW_WIDTH_PERCENTAGE  , g_Settings.WidthPercentage         );
+    WriteSetting(iniFile, GENERAL           , WINDOW_HEIGHT_PERCENTAGE , g_Settings.HeightPercentage        );
+    WriteSetting(iniFile, GENERAL           , SHOW_SEARCH_STRING       , g_Settings.ShowSearchString        );
+    WriteSetting(iniFile, GENERAL           , SHOW_COL_HEADER          , g_Settings.ShowColHeader           );
+    WriteSetting(iniFile, GENERAL           , SHOW_COL_PROCESSNAME     , g_Settings.ShowColProcessName      );
+    WriteSetting(iniFile, GENERAL           , CHECK_FOR_UPDATES        , g_Settings.CheckForUpdatesOpt      );
+    WriteSetting(iniFile, GENERAL           , SYSTEM_TRAY_ICON_ENABLED , g_Settings.SystemTrayIconEnabled   );
+    WriteSetting(iniFile, MOUSE_HOVER       , SHOW_PROCESS_INFO_TOOLTIP, g_Settings.ShowProcessInfoTooltip  );
+    WriteSetting(iniFile, MOUSE_HOVER       , SHOW_HIGHLIGHT_RECT      , g_Settings.ShowHighlightRect       );
+    WriteSetting(iniFile, MOUSE_HOVER       , SHOW_DELETE_BUTTON       , g_Settings.ShowDeleteButton        );
+    WriteSetting(iniFile, BACKTICK          , SIMILAR_PROCESS_GROUPS   , g_Settings.SimilarProcessGroups    );
+    WriteSetting(iniFile, PROCESS_EXCLUSIONS, ENABLED                  , g_Settings.ProcessExclusionsEnabled);
+    WriteSetting(iniFile, PROCESS_EXCLUSIONS, PROCESS_LIST             , g_Settings.ProcessExclusions       );
 }
 
 /*!
@@ -521,34 +563,36 @@ void ATLoadSettings() {
     DWORD LVFontColor       = 0;
     DWORD LVBackgroundColor = 0;
 
-    ReadSetting(iniFile, L"Hotkeys"          , L"AltTabEnabled"         , DEFAULT_ALT_TAB_ENABLED           , g_Settings.HKAltTabEnabled         );
-    ReadSetting(iniFile, L"Hotkeys"          , L"AltBacktickEnabled"    , DEFAULT_ALT_BACKTICK_ENABLED      , g_Settings.HKAltBacktickEnabled    );
-    ReadSetting(iniFile, L"Hotkeys"          , L"AltCtrlTabEnabled"     , DEFAULT_ALT_CTRL_TAB_ENABLED      , g_Settings.HKAltCtrlTabEnabled     );
-    ReadSetting(iniFile, L"SearchString"     , L"CueBannerText"         , DEFAULT_SS_CUE_BANNER_TEXT        , g_Settings.SSCueBannerText         );
-    ReadSetting(iniFile, L"SearchString"     , L"FontName"              , DEFAULT_SS_FONT_NAME              , g_Settings.SSFontName              );
-    ReadSetting(iniFile, L"SearchString"     , L"FontSize"              , DEFAULT_SS_FONT_SIZE              , g_Settings.SSFontSize              );
-    ReadSetting(iniFile, L"SearchString"     , L"FontStyle"             , DEFAULT_SS_FONT_STYLE             , g_Settings.SSFontStyle             );
-    ReadSetting(iniFile, L"SearchString"     , L"FontColor"             , DEFAULT_SS_FONT_COLOR             , SSFontColor                        );
-    ReadSetting(iniFile, L"SearchString"     , L"BackgroundColor"       , DEFAULT_SS_BG_COLOR               , SSBackgroundColor                  );
-    ReadSetting(iniFile, L"ListView"         , L"FontName"              , DEFAULT_LV_FONT_NAME              , g_Settings.LVFontName              );
-    ReadSetting(iniFile, L"ListView"         , L"FontSize"              , DEFAULT_LV_FONT_SIZE              , g_Settings.LVFontSize              );
-    ReadSetting(iniFile, L"ListView"         , L"FontStyle"             , DEFAULT_LV_FONT_STYLE             , g_Settings.LVFontStyle             );
-    ReadSetting(iniFile, L"ListView"         , L"FontColor"             , DEFAULT_LV_FONT_COLOR             , LVFontColor                        );
-    ReadSetting(iniFile, L"ListView"         , L"BackgroundColor"       , DEFAULT_LV_BG_COLOR               , LVBackgroundColor                  );
-    ReadSetting(iniFile, L"Backtick"         , L"SimilarProcessGroups"  , DEFAULT_SIMILARPROCESSGROUPS      , g_Settings.SimilarProcessGroups    );
-    ReadSetting(iniFile, L"General"          , L"PromptTerminateAll"    , DEFAULT_PROMPTTERMINATEALL        , g_Settings.PromptTerminateAll      );
-    ReadSetting(iniFile, L"General"          , L"FuzzyMatchPercent"     , DEFAULT_FUZZYMATCHPERCENT         , g_Settings.FuzzyMatchPercent       );
-    ReadSetting(iniFile, L"General"          , L"WindowTransparency"    , DEFAULT_TRANSPARENCY              , g_Settings.Transparency            );
-    ReadSetting(iniFile, L"General"          , L"WindowWidthPercentage" , DEFAULT_WIDTH                     , g_Settings.WidthPercentage         );
-    ReadSetting(iniFile, L"General"          , L"WindowHeightPercentage", DEFAULT_HEIGHT                    , g_Settings.HeightPercentage        );
-    ReadSetting(iniFile, L"General"          , L"ShowSearchString"      , DEFAULT_SHOW_SEARCH_STRING        , g_Settings.ShowSearchString        );
-    ReadSetting(iniFile, L"General"          , L"ShowColHeader"         , DEFAULT_SHOW_COL_HEADER           , g_Settings.ShowColHeader           );
-    ReadSetting(iniFile, L"General"          , L"ShowColProcessName"    , DEFAULT_SHOW_COL_PROCESSNAME      , g_Settings.ShowColProcessName      );
-    ReadSetting(iniFile, L"General"          , L"ShowProcessInfoTooltip", DEFAULT_SHOW_PROCESSINFO_TOOLTIP  , g_Settings.ShowProcessInfoTooltip  );
-    ReadSetting(iniFile, L"General"          , L"CheckForUpdates"       , DEFAULT_CHECKFORUPDATES           , g_Settings.CheckForUpdatesOpt      );
-    ReadSetting(iniFile, L"General"          , L"SystemTrayIconEnabled" , DEFAULT_SYSTEM_TRAY_ICON_ENABLED  , g_Settings.SystemTrayIconEnabled   );
-    ReadSetting(iniFile, L"ProcessExclusions", L"Enabled"               , DEFAULT_PROCESS_EXCLUSIONS_ENABLED, g_Settings.ProcessExclusionsEnabled);
-    ReadSetting(iniFile, L"ProcessExclusions", L"ProcessList"           , DEFAULT_PROCESS_EXCLUSIONS        , g_Settings.ProcessExclusions       );
+    ReadSetting(iniFile, HOTKEYS           , ALTTAB_ENABLED           , DEFAULT_ALT_TAB_ENABLED            , g_Settings.HKAltTabEnabled         );
+    ReadSetting(iniFile, HOTKEYS           , ALTBACKTICK_ENABLED      , DEFAULT_ALT_BACKTICK_ENABLED       , g_Settings.HKAltBacktickEnabled    );
+    ReadSetting(iniFile, HOTKEYS           , ALTCTRLTAB_ENABLED       , DEFAULT_ALT_CTRL_TAB_ENABLED       , g_Settings.HKAltCtrlTabEnabled     );
+    ReadSetting(iniFile, SEARCH_STRING     , CUE_BANNER_TEXT          , DEFAULT_SS_CUE_BANNER_TEXT         , g_Settings.SSCueBannerText         );
+    ReadSetting(iniFile, SEARCH_STRING     , FONT_NAME                , DEFAULT_SS_FONT_NAME               , g_Settings.SSFontName              );
+    ReadSetting(iniFile, SEARCH_STRING     , FONT_SIZE                , DEFAULT_SS_FONT_SIZE               , g_Settings.SSFontSize              );
+    ReadSetting(iniFile, SEARCH_STRING     , FONT_STYLE               , DEFAULT_SS_FONT_STYLE              , g_Settings.SSFontStyle             );
+    ReadSetting(iniFile, SEARCH_STRING     , FONT_COLOR               , DEFAULT_SS_FONT_COLOR              , SSFontColor                        );
+    ReadSetting(iniFile, SEARCH_STRING     , BACKGROUND_COLOR         , DEFAULT_SS_BG_COLOR                , SSBackgroundColor                  );
+    ReadSetting(iniFile, LIST_VIEW         , FONT_NAME                , DEFAULT_LV_FONT_NAME               , g_Settings.LVFontName              );
+    ReadSetting(iniFile, LIST_VIEW         , FONT_SIZE                , DEFAULT_LV_FONT_SIZE               , g_Settings.LVFontSize              );
+    ReadSetting(iniFile, LIST_VIEW         , FONT_STYLE               , DEFAULT_LV_FONT_STYLE              , g_Settings.LVFontStyle             );
+    ReadSetting(iniFile, LIST_VIEW         , FONT_COLOR               , DEFAULT_LV_FONT_COLOR              , LVFontColor                        );
+    ReadSetting(iniFile, LIST_VIEW         , BACKGROUND_COLOR         , DEFAULT_LV_BG_COLOR                , LVBackgroundColor                  );
+    ReadSetting(iniFile, BACKTICK          , SIMILAR_PROCESS_GROUPS   , DEFAULT_SIMILARPROCESSGROUPS       , g_Settings.SimilarProcessGroups    );
+    ReadSetting(iniFile, GENERAL           , PROMPT_TERMINATE_ALL     , DEFAULT_PROMPTTERMINATEALL         , g_Settings.PromptTerminateAll      );
+    ReadSetting(iniFile, GENERAL           , FUZZY_MATCH_PERCENT      , DEFAULT_FUZZYMATCHPERCENT          , g_Settings.FuzzyMatchPercent       );
+    ReadSetting(iniFile, GENERAL           , WINDOW_TRANSPARENCY      , DEFAULT_TRANSPARENCY               , g_Settings.Transparency            );
+    ReadSetting(iniFile, GENERAL           , WINDOW_WIDTH_PERCENTAGE  , DEFAULT_WIDTH                      , g_Settings.WidthPercentage         );
+    ReadSetting(iniFile, GENERAL           , WINDOW_HEIGHT_PERCENTAGE , DEFAULT_HEIGHT                     , g_Settings.HeightPercentage        );
+    ReadSetting(iniFile, GENERAL           , SHOW_SEARCH_STRING       , DEFAULT_SHOW_SEARCH_STRING         , g_Settings.ShowSearchString        );
+    ReadSetting(iniFile, GENERAL           , SHOW_COL_HEADER          , DEFAULT_SHOW_COL_HEADER            , g_Settings.ShowColHeader           );
+    ReadSetting(iniFile, GENERAL           , SHOW_COL_PROCESSNAME     , DEFAULT_SHOW_COL_PROCESSNAME       , g_Settings.ShowColProcessName      );
+    ReadSetting(iniFile, GENERAL           , CHECK_FOR_UPDATES        , DEFAULT_CHECKFORUPDATES            , g_Settings.CheckForUpdatesOpt      );
+    ReadSetting(iniFile, GENERAL           , SYSTEM_TRAY_ICON_ENABLED , DEFAULT_SYSTEM_TRAY_ICON_ENABLED   , g_Settings.SystemTrayIconEnabled   );
+    ReadSetting(iniFile, MOUSE_HOVER       , SHOW_PROCESS_INFO_TOOLTIP, DEFAULT_MH_SHOW_PROCESSINFO_TOOLTIP, g_Settings.ShowProcessInfoTooltip  );
+    ReadSetting(iniFile, MOUSE_HOVER       , SHOW_HIGHLIGHT_RECT      , DEFAULT_MH_SHOW_HIGHLIGHT_RECT     , g_Settings.ShowHighlightRect       );
+    ReadSetting(iniFile, MOUSE_HOVER       , SHOW_DELETE_BUTTON       , DEFAULT_MH_SHOW_DELETE_BUTTON      , g_Settings.ShowDeleteButton        );
+    ReadSetting(iniFile, PROCESS_EXCLUSIONS, ENABLED                  , DEFAULT_PROCESS_EXCLUSIONS_ENABLED , g_Settings.ProcessExclusionsEnabled);
+    ReadSetting(iniFile, PROCESS_EXCLUSIONS, PROCESS_LIST             , DEFAULT_PROCESS_EXCLUSIONS         , g_Settings.ProcessExclusions       );
 
     // Covert color values (0xRRGGBB that are stored in AltTabSettings.ini file) to COLORREF
     g_Settings.SSFontColor       = RGBIntToColorRef(SSFontColor      );
@@ -652,22 +696,25 @@ void ATApplySettings(HWND hDlg) {
  * \param[out] settings    AltTabSettings
  */
 void ATReadSettingsFromUI(HWND hDlg, AltTabSettings& settings) {
-    settings.SimilarProcessGroups      = GetDlgItemTextEx  (hDlg, IDC_EDIT_SIMILAR_PROCESS_GROUPS);
+    settings.SSCueBannerText           = GetDlgItemTextEx  (hDlg, IDC_EDIT_SS_BANNER_TEXT              );
+    settings.SimilarProcessGroups      = GetDlgItemTextEx  (hDlg, IDC_EDIT_SIMILAR_PROCESS_GROUPS      );
     settings.FuzzyMatchPercent         = GetDlgItemInt     (hDlg, IDC_EDIT_FUZZY_MATCH_PERCENT     , nullptr, FALSE);
     settings.Transparency              = GetDlgItemInt     (hDlg, IDC_EDIT_WINDOW_TRANSPARENCY     , nullptr, FALSE);
     settings.WidthPercentage           = GetDlgItemInt     (hDlg, IDC_EDIT_WINDOW_WIDTH_PERCENTAGE , nullptr, FALSE);
     settings.HeightPercentage          = GetDlgItemInt     (hDlg, IDC_EDIT_WINDOW_HEIGHT_PERCENTAGE, nullptr, FALSE);
-    settings.PromptTerminateAll        = IsDlgButtonChecked(hDlg, IDC_CHECK_PROMPT_TERMINATE_ALL    ) == BST_CHECKED;
-    settings.ShowSearchString          = IsDlgButtonChecked(hDlg, IDC_CHECK_SHOW_SEARCH_STRING      ) == BST_CHECKED;
-    settings.ShowColHeader             = IsDlgButtonChecked(hDlg, IDC_CHECK_SHOW_COL_HEADER         ) == BST_CHECKED;
-    settings.ShowColProcessName        = IsDlgButtonChecked(hDlg, IDC_CHECK_SHOW_COL_PROCESSNAME    ) == BST_CHECKED;
-    settings.ShowProcessInfoTooltip    = IsDlgButtonChecked(hDlg, IDC_CHECK_SHOW_PROCESSINFO_TOOLTIP) == BST_CHECKED;
-    settings.HKAltTabEnabled           = IsDlgButtonChecked(hDlg, IDC_CHECK_ALT_TAB                 ) == BST_CHECKED;
-    settings.HKAltBacktickEnabled      = IsDlgButtonChecked(hDlg, IDC_CHECK_ALT_BACKTICK            ) == BST_CHECKED;
-    settings.HKAltCtrlTabEnabled       = IsDlgButtonChecked(hDlg, IDC_CHECK_ALT_CTRL_TAB            ) == BST_CHECKED;
-    settings.ProcessExclusionsEnabled  = IsDlgButtonChecked(hDlg, IDC_CHECK_PROCESS_EXCLUSIONS      ) == BST_CHECKED;
-    settings.ProcessExclusions         = GetDlgItemTextEx  (hDlg, IDC_EDIT_PROCESS_EXCLUSIONS       );
-    int selectedIndex                  = ComboBox_GetCurSel(GetDlgItem(hDlg, IDC_CHECK_FOR_UPDATES));
+    settings.PromptTerminateAll        = IsDlgButtonChecked(hDlg, IDC_CHECK_PROMPT_TERMINATE_ALL       ) == BST_CHECKED;
+    settings.ShowSearchString          = IsDlgButtonChecked(hDlg, IDC_CHECK_SHOW_SEARCH_STRING         ) == BST_CHECKED;
+    settings.ShowColHeader             = IsDlgButtonChecked(hDlg, IDC_CHECK_SHOW_COL_HEADER            ) == BST_CHECKED;
+    settings.ShowColProcessName        = IsDlgButtonChecked(hDlg, IDC_CHECK_SHOW_COL_PROCESSNAME       ) == BST_CHECKED;
+    settings.HKAltTabEnabled           = IsDlgButtonChecked(hDlg, IDC_CHECK_ALT_TAB                    ) == BST_CHECKED;
+    settings.HKAltBacktickEnabled      = IsDlgButtonChecked(hDlg, IDC_CHECK_ALT_BACKTICK               ) == BST_CHECKED;
+    settings.HKAltCtrlTabEnabled       = IsDlgButtonChecked(hDlg, IDC_CHECK_ALT_CTRL_TAB               ) == BST_CHECKED;
+    settings.ShowProcessInfoTooltip    = IsDlgButtonChecked(hDlg, IDC_CHECK_MH_SHOW_PROCESSINFO_TOOLTIP) == BST_CHECKED;
+    settings.ShowHighlightRect         = IsDlgButtonChecked(hDlg, IDC_CHECK_MH_SHOW_HIGHLIGHT_RECT     ) == BST_CHECKED;
+    settings.ShowDeleteButton          = IsDlgButtonChecked(hDlg, IDC_CHECK_MH_SHOW_DELETE_BUTTON      ) == BST_CHECKED;
+    settings.ProcessExclusionsEnabled  = IsDlgButtonChecked(hDlg, IDC_CHECK_PROCESS_EXCLUSIONS         ) == BST_CHECKED;
+    settings.ProcessExclusions         = GetDlgItemTextEx  (hDlg, IDC_EDIT_PROCESS_EXCLUSIONS          );
+    const int selectedIndex            = ComboBox_GetCurSel(GetDlgItem(hDlg, IDC_CHECK_FOR_UPDATES));
     settings.CheckForUpdatesOpt        = AltTabSettings::CheckForUpdatesOptions[max(selectedIndex, 0)];
 }
 
@@ -707,7 +754,11 @@ void ATLogSettings(const AltTabSettings& settings) {
     AT_LOG_DEBUG("  ShowSearchString        : [%s]", BOOL_TO_CSTR(settings.ShowSearchString));
     AT_LOG_DEBUG("  ShowColHeader           : [%s]", BOOL_TO_CSTR(settings.ShowColHeader));
     AT_LOG_DEBUG("  ShowColProcessName      : [%s]", BOOL_TO_CSTR(settings.ShowColProcessName));
+    AT_LOG_DEBUG("  ShowMouseOverItem       : [%s]", BOOL_TO_CSTR(settings.ShowHighlightRect));
+    AT_LOG_DEBUG("[MouseHover]");
     AT_LOG_DEBUG("  ShowProcessInfoTooltip  : [%s]", BOOL_TO_CSTR(settings.ShowProcessInfoTooltip));
+    AT_LOG_DEBUG("  ShowHighlightRect       : [%s]", BOOL_TO_CSTR(settings.ShowHighlightRect));
+    AT_LOG_DEBUG("  ShowDeleteButton        : [%s]", BOOL_TO_CSTR(settings.ShowDeleteButton));
     AT_LOG_DEBUG("[Backtick]");
     AT_LOG_DEBUG("  SimilarProcessGroups    : [%s]", WStrToUTF8(settings.SimilarProcessGroups).c_str());
     AT_LOG_DEBUG("[ProcessExclusions]");
@@ -742,13 +793,17 @@ bool AreSettingsModified(HWND hDlg) {
         settings.ShowSearchString         != g_Settings.ShowSearchString         ||
         settings.ShowColHeader            != g_Settings.ShowColHeader            ||
         settings.ShowColProcessName       != g_Settings.ShowColProcessName       ||
-        settings.ShowProcessInfoTooltip   != g_Settings.ShowProcessInfoTooltip   ||
         settings.HKAltTabEnabled          != g_Settings.HKAltTabEnabled          ||
         settings.HKAltBacktickEnabled     != g_Settings.HKAltBacktickEnabled     ||
         settings.HKAltCtrlTabEnabled      != g_Settings.HKAltCtrlTabEnabled      ||
         settings.ProcessExclusionsEnabled != g_Settings.ProcessExclusionsEnabled ||
         settings.ProcessExclusions        != g_Settings.ProcessExclusions        ||
         settings.SimilarProcessGroups     != g_Settings.SimilarProcessGroups     ||
+        settings.SSCueBannerText          != g_Settings.SSCueBannerText          ||
+        // Mouse Hover settings
+        settings.ShowProcessInfoTooltip   != g_Settings.ShowProcessInfoTooltip   ||
+        settings.ShowHighlightRect        != g_Settings.ShowHighlightRect        ||
+        settings.ShowDeleteButton         != g_Settings.ShowDeleteButton         ||
         false;
 
     return modified;
@@ -810,7 +865,8 @@ std::pair<std::wstring, std::wstring> AltTabSettings::IsValid(bool& valid) {
  * \param settings   AltTabSettings
  */
 void ATSettingsInitDialog(HWND hDlg, const AltTabSettings& settings) {
-    SetDlgItemText    (hDlg, IDC_EDIT_SETTINGS_FILEPATH       , ATSettingsFilePath().c_str());
+    SetDlgItemText    (hDlg, IDC_EDIT_SETTINGS_FILEPATH       , ATSettingsFilePath().c_str()         );
+    SetDlgItemText    (hDlg, IDC_EDIT_SS_BANNER_TEXT          , settings.SSCueBannerText.c_str()     );
     SetDlgItemText    (hDlg, IDC_EDIT_SIMILAR_PROCESS_GROUPS  , settings.SimilarProcessGroups.c_str());
  
     HFONT    hFont     = CreateFontW(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
@@ -822,15 +878,17 @@ void ATSettingsInitDialog(HWND hDlg, const AltTabSettings& settings) {
     SendMessageW(hEditBox1, WM_SETFONT     , (WPARAM)hFont    , TRUE);
     SendMessageW(hEditBox2, WM_SETFONT     , (WPARAM)hFont    , TRUE);
  
-    CheckDlgButton    (hDlg, IDC_CHECK_ALT_TAB                 , settings.HKAltTabEnabled          ? BST_CHECKED : BST_UNCHECKED);
-    CheckDlgButton    (hDlg, IDC_CHECK_ALT_BACKTICK            , settings.HKAltBacktickEnabled     ? BST_CHECKED : BST_UNCHECKED);
-    CheckDlgButton    (hDlg, IDC_CHECK_ALT_CTRL_TAB            , settings.HKAltCtrlTabEnabled      ? BST_CHECKED : BST_UNCHECKED);
-    CheckDlgButton    (hDlg, IDC_CHECK_PROMPT_TERMINATE_ALL    , settings.PromptTerminateAll       ? BST_CHECKED : BST_UNCHECKED);
-    CheckDlgButton    (hDlg, IDC_CHECK_SHOW_SEARCH_STRING      , settings.ShowSearchString         ? BST_CHECKED : BST_UNCHECKED);
-    CheckDlgButton    (hDlg, IDC_CHECK_SHOW_COL_HEADER         , settings.ShowColHeader            ? BST_CHECKED : BST_UNCHECKED);
-    CheckDlgButton    (hDlg, IDC_CHECK_SHOW_COL_PROCESSNAME    , settings.ShowColProcessName       ? BST_CHECKED : BST_UNCHECKED);
-    CheckDlgButton    (hDlg, IDC_CHECK_SHOW_PROCESSINFO_TOOLTIP, settings.ShowProcessInfoTooltip   ? BST_CHECKED : BST_UNCHECKED);
-    CheckDlgButton    (hDlg, IDC_CHECK_PROCESS_EXCLUSIONS      , settings.ProcessExclusionsEnabled ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton    (hDlg, IDC_CHECK_ALT_TAB                    , settings.HKAltTabEnabled          ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton    (hDlg, IDC_CHECK_ALT_BACKTICK               , settings.HKAltBacktickEnabled     ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton    (hDlg, IDC_CHECK_ALT_CTRL_TAB               , settings.HKAltCtrlTabEnabled      ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton    (hDlg, IDC_CHECK_PROMPT_TERMINATE_ALL       , settings.PromptTerminateAll       ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton    (hDlg, IDC_CHECK_SHOW_SEARCH_STRING         , settings.ShowSearchString         ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton    (hDlg, IDC_CHECK_SHOW_COL_HEADER            , settings.ShowColHeader            ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton    (hDlg, IDC_CHECK_SHOW_COL_PROCESSNAME       , settings.ShowColProcessName       ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton    (hDlg, IDC_CHECK_PROCESS_EXCLUSIONS         , settings.ProcessExclusionsEnabled ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton    (hDlg, IDC_CHECK_MH_SHOW_PROCESSINFO_TOOLTIP, settings.ShowProcessInfoTooltip   ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton    (hDlg, IDC_CHECK_MH_SHOW_HIGHLIGHT_RECT     , settings.ShowHighlightRect        ? BST_CHECKED : BST_UNCHECKED);
+    CheckDlgButton    (hDlg, IDC_CHECK_MH_SHOW_DELETE_BUTTON      , settings.ShowDeleteButton         ? BST_CHECKED : BST_UNCHECKED);
 
     EnableWindow      (GetDlgItem(hDlg, IDC_EDIT_PROCESS_EXCLUSIONS), settings.ProcessExclusionsEnabled);
  
@@ -859,16 +917,16 @@ void ATSettingsInitDialog(HWND hDlg, const AltTabSettings& settings) {
     ComboBox_SetCurSel(hComboBox, settings.GetCheckForUpdatesIndex());
  
     // Center the dialog on the screen
-    int screenWidth  = GetSystemMetrics(SM_CXSCREEN);
-    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+    const int screenWidth  = GetSystemMetrics(SM_CXSCREEN);
+    const int screenHeight = GetSystemMetrics(SM_CYSCREEN);
     RECT dlgRect;
     GetWindowRect(hDlg, &dlgRect);
  
-    int dlgWidth  = dlgRect.right  - dlgRect.left;
-    int dlgHeight = dlgRect.bottom - dlgRect.top;
+    const int dlgWidth  = dlgRect.right  - dlgRect.left;
+    const int dlgHeight = dlgRect.bottom - dlgRect.top;
  
-    int posX      = (screenWidth  - dlgWidth ) / 2;
-    int posY      = (screenHeight - dlgHeight) / 2;
+    const int posX      = (screenWidth  - dlgWidth ) / 2;
+    const int posY      = (screenHeight - dlgHeight) / 2;
  
     SetWindowPos(hDlg, HWND_TOP, posX, posY, 0, 0, SWP_NOSIZE);
  

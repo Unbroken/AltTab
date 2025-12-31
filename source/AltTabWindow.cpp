@@ -305,7 +305,7 @@ namespace AT {
         }
 
         // Hot track: draw a outline rectangle for hot-tracked item instead of filling the background
-        if (lpDrawItemStruct->itemState & ODS_HOTLIGHT || g_nLVHotItem == rowIndex) {
+        if (g_Settings.ShowHighlightRect && (lpDrawItemStruct->itemState & ODS_HOTLIGHT || g_nLVHotItem == rowIndex)) {
             HBRUSH hbr = CreateSolidBrush(RGB(100, 149, 237)); // Cornflower Blue
             FrameRect(hdc, &rcItem, hbr);
             DeleteObject(hbr);
@@ -362,7 +362,7 @@ namespace AT {
         }
 
         // Draw close button if hot-tracked
-        if (lpDrawItemStruct->itemState & ODS_HOTLIGHT || g_nLVHotItem == rowIndex) {
+        if (g_Settings.ShowDeleteButton && (lpDrawItemStruct->itemState & ODS_HOTLIGHT || g_nLVHotItem == rowIndex)) {
             // Draw close button at the right side of the item
             g_rcBtnClose.left   = rcItem.right - g_nIconSize - 1;
             g_rcBtnClose.top    = rcItem.top + 1;
@@ -2328,19 +2328,22 @@ BOOL ATW_OnNotify(HWND /*hwnd*/, int /*idFrom*/, NMHDR* pnmhdr) {
                 pnmListView->iItem = ht.iItem;
             }
         }
+
         // Check if the mouse is over on close button area then change the button image to active
-        if (g_rcBtnClose.left <= ptClientPos.x && ptClientPos.x <= g_rcBtnClose.right
-            && g_rcBtnClose.top <= ptClientPos.y && ptClientPos.y <= g_rcBtnClose.bottom) {
-            if (!g_IsMouseOverCloseButton) {
-                g_IsMouseOverCloseButton = true;
-                // Invalidate the button area to redraw
-                InvalidateRect(g_hListView, &g_rcBtnClose, FALSE);
-            }
-        } else {
-            if (g_IsMouseOverCloseButton) {
-                g_IsMouseOverCloseButton = false;
-                // Invalidate the button area to redraw
-                InvalidateRect(g_hListView, &g_rcBtnClose, FALSE);
+        if (g_Settings.ShowDeleteButton) {
+            if (g_rcBtnClose.left <= ptClientPos.x && ptClientPos.x <= g_rcBtnClose.right
+                && g_rcBtnClose.top <= ptClientPos.y && ptClientPos.y <= g_rcBtnClose.bottom) {
+                if (!g_IsMouseOverCloseButton) {
+                    g_IsMouseOverCloseButton = true;
+                    // Invalidate the button area to redraw
+                    InvalidateRect(g_hListView, &g_rcBtnClose, FALSE);
+                }
+            } else {
+                if (g_IsMouseOverCloseButton) {
+                    g_IsMouseOverCloseButton = false;
+                    // Invalidate the button area to redraw
+                    InvalidateRect(g_hListView, &g_rcBtnClose, FALSE);
+                }
             }
         }
 

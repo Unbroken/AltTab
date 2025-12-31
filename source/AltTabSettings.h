@@ -43,7 +43,9 @@ using StringList           = std::vector<std::wstring>;
 #define DEFAULT_SHOW_SEARCH_STRING           true
 #define DEFAULT_SHOW_COL_HEADER              false
 #define DEFAULT_SHOW_COL_PROCESSNAME         false
-#define DEFAULT_SHOW_PROCESSINFO_TOOLTIP     false
+#define DEFAULT_MH_SHOW_PROCESSINFO_TOOLTIP  true
+#define DEFAULT_MH_SHOW_HIGHLIGHT_RECT       true
+#define DEFAULT_MH_SHOW_DELETE_BUTTON        true
 #define DEFAULT_SYSTEM_TRAY_ICON_ENABLED     true
 #define DEFAULT_PROCESS_EXCLUSIONS_ENABLED   false
 #define DEFAULT_PROCESS_EXCLUSIONS           L""
@@ -101,8 +103,13 @@ struct AltTabSettings {
     bool                   ShowSearchString;          // Show search string
     bool                   ShowColHeader;             // Show column header
     bool                   ShowColProcessName;        // Show column - Process Name
-    bool                   ShowProcessInfoTooltip;    // Show process info tooltip
     bool                   SystemTrayIconEnabled;     // Create system tray icon if enabled is true
+    // ----------------------------------------------------------------------------
+    // MouseHover Settings
+    // ----------------------------------------------------------------------------
+    bool                   ShowProcessInfoTooltip;    // Show process info tooltip
+    bool                   ShowHighlightRect;         // Show mouse over item
+    bool                   ShowDeleteButton;          // Show delete button
     // ----------------------------------------------------------------------------
     // Backtick Settings
     // ----------------------------------------------------------------------------
