@@ -29,5 +29,5 @@
 #define AT_PRODUCT_NAMEW         TEXT(AT_PRODUCT_NAME)
 #define AT_PRODUCT_VERSIONA      ATSTR(AT_PRODUCT_YEARA.AT_VERSION_MINOR)
 #define AT_PRODUCT_VERSIONW      ATSTR(AT_PRODUCT_YEARA.AT_VERSION_MINOR)
-#define AT_LEGAL_COPYRIGHT       "Copyright � {MAJOR} Lokesh Govindu"
+#define AT_LEGAL_COPYRIGHT       "Copyright © {MAJOR} Lokesh Govindu"
 #define AT_FILE_DESCRIPTION      "AltTab Switcher"

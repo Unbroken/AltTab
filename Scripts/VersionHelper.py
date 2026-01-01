@@ -18,7 +18,7 @@ def read_version_info():
     # Update major version with year if needed
     current_year = str(datetime.now().year)
 
-    if version_parts[0] != current_year:
+    if version_parts[0] < current_year:
         version_parts[0] = current_year
         version_parts[1] = "1"  # Reset minor version if major version changes
         version_parts[2] = "0"  # Reset patch version if major version changes
@@ -30,6 +30,10 @@ def read_version_info():
 def get_current_version():
     version_parts = read_version_info()
     return f"{version_parts[0]}.{version_parts[1]}.{version_parts[2]}.{version_parts[3]}"
+
+
+def create_version_header():
+    CreateVersionH.create_version_header()
 
 
 def update_version_info():

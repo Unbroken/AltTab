@@ -198,9 +198,9 @@ namespace AT {
             RECT matchRect = rci;
             matchRect.right = AT_MIN(matchRect.right, matchRect.left + matchSize.cx);
 
-            HBRUSH hbr = CreateSolidBrush(RGB(255, 255, 191));
-            FillRect(hdc, &matchRect, hbr);    // Yellow background for match
-            SetTextColor(hdc, RGB(255, 0, 0)); // Red text for highlighted part
+            HBRUSH hbr = CreateSolidBrush(g_Settings.LVHighlightBackgroundColor);
+            FillRect(hdc, &matchRect, hbr);
+            SetTextColor(hdc, g_Settings.LVHighlightTextColor);
             DrawTextW(hdc, matchText, matchTextLen, &matchRect, format);
 
             // Move xPos forward

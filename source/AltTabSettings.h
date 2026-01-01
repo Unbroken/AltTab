@@ -26,13 +26,15 @@ using StringList           = std::vector<std::wstring>;
 #define DEFAULT_SS_FONT_NAME                 L"Lucida Handwriting"
 #define DEFAULT_SS_FONT_SIZE                 11
 #define DEFAULT_SS_FONT_STYLE                L"normal"               // normal, italic, bold and bold italic
-#define DEFAULT_SS_FONT_COLOR                RGB(0xFF, 0x00, 0x00)
-#define DEFAULT_SS_BG_COLOR                  RGB(0xFF, 0xFF, 0xFF)
+#define DEFAULT_SS_FONT_COLOR                0xFF0000
+#define DEFAULT_SS_BG_COLOR                  0xFFFFFF
 #define DEFAULT_LV_FONT_NAME                 L"Lucida Handwriting"
 #define DEFAULT_LV_FONT_SIZE                 11
 #define DEFAULT_LV_FONT_STYLE                L"normal"               // normal, italic, bold and bold italic
-#define DEFAULT_LV_FONT_COLOR                RGB(0xFF, 0xFF, 0xFF)
-#define DEFAULT_LV_BG_COLOR                  RGB(0x00, 0x00, 0x00)
+#define DEFAULT_LV_FONT_COLOR                0xFFFFFF                // RGB(0xFF, 0xFF, 0xFF) White text
+#define DEFAULT_LV_BG_COLOR                  0x000000                // RGB(0x00, 0x00, 0x00) Black background
+#define DEFAULT_LV_HIGHLIGHT_TEXT_COLOR      0xFF0000                // RGB(0xFF, 0x00, 0x00) Red text for highlighted part
+#define DEFAULT_LV_HIGHLIGHT_BG_COLOR        0xFFFFBF                // RGB(0xFF, 0xFF, 0xBF) Yellow background for match
 #define DEFAULT_WIDTH                        45
 #define DEFAULT_HEIGHT                       45
 #define DEFAULT_FUZZYMATCHPERCENT            60
@@ -67,59 +69,61 @@ struct AltTabSettings {
     // ----------------------------------------------------------------------------
     // Hotkeys
     // ----------------------------------------------------------------------------
-    bool                   HKAltTabEnabled;           // Alt+Tab enabled
-    bool                   HKAltBacktickEnabled;      // Alt+Backtick enabled
-    bool                   HKAltCtrlTabEnabled;       // Alt+Ctrl+Tab enabled
+    bool                   HKAltTabEnabled;            // Alt+Tab enabled
+    bool                   HKAltBacktickEnabled;       // Alt+Backtick enabled
+    bool                   HKAltCtrlTabEnabled;        // Alt+Ctrl+Tab enabled
     // ----------------------------------------------------------------------------
     // SearchString Font Name, Size, Style, Color and Background Color
     // ----------------------------------------------------------------------------
-    std::wstring           SSCueBannerText;           // Search String Cue Banner Text
-    std::wstring           SSFontName;                // Search String Font Name
-    int                    SSFontSize;                // Search String Font Size
-    std::wstring           SSFontStyle;               // Search String Font Style
-    COLORREF               SSFontColor;               // Search String Font color
-    COLORREF               SSBackgroundColor;         // Search String Background color
+    std::wstring           SSCueBannerText;            // Search String Cue Banner Text
+    std::wstring           SSFontName;                 // Search String Font Name
+    int                    SSFontSize;                 // Search String Font Size
+    std::wstring           SSFontStyle;                // Search String Font Style
+    COLORREF               SSFontColor;                // Search String Font color
+    COLORREF               SSBackgroundColor;          // Search String Background color
     // ----------------------------------------------------------------------------
     // ListView Font Name, Size, Style, Color and Background Color
     // ----------------------------------------------------------------------------
-    std::wstring           LVFontName;                // ListView Font Name
-    int                    LVFontSize;                // ListView Font Size
-    std::wstring           LVFontStyle;               // ListView Font Style
-    COLORREF               LVFontColor;               // ListView Font color
-    COLORREF               LVBackgroundColor;         // ListView Background color
+    std::wstring           LVFontName;                 // ListView Font Name
+    int                    LVFontSize;                 // ListView Font Size
+    std::wstring           LVFontStyle;                // ListView Font Style
+    COLORREF               LVFontColor;                // ListView Font color
+    COLORREF               LVBackgroundColor;          // ListView Background color
+    COLORREF               LVHighlightTextColor;       // ListView Highlight Text color
+    COLORREF               LVHighlightBackgroundColor; // ListView Highlight Background color
     // ----------------------------------------------------------------------------
     // General Settings
     // ----------------------------------------------------------------------------
-    int                    WidthPercentage;           // Window width in percentage of the actual screen width
-    int                    HeightPercentage;          // Window height in percentage of the actual screen height
-    int                    WindowWidth;               // Window width, will be calculated at runtime
-    int                    WindowHeight;              // Window height, will be calculated at runtime
-    int                    FuzzyMatchPercent;         // Fuzzy match percent
-    int                    Transparency;              // Window transparency
-    std::wstring           SimilarProcessGroups;      // Similar process groups
-    ProcessGroupsList      ProcessGroupsList;         // Process groups, will be constructed at runtime from SimilarProcessGroups
-    std::wstring           CheckForUpdatesOpt;        // Check for updates
-    bool                   PromptTerminateAll;        // Ask before terminating all processes
-    bool                   ShowSearchString;          // Show search string
-    bool                   ShowColHeader;             // Show column header
-    bool                   ShowColProcessName;        // Show column - Process Name
-    bool                   SystemTrayIconEnabled;     // Create system tray icon if enabled is true
+    int                    WidthPercentage;            // Window width in percentage of the actual screen width
+    int                    HeightPercentage;           // Window height in percentage of the actual screen height
+    int                    WindowWidth;                // Window width, will be calculated at runtime
+    int                    WindowHeight;               // Window height, will be calculated at runtime
+    int                    FuzzyMatchPercent;          // Fuzzy match percent
+    int                    Transparency;               // Window transparency
+    std::wstring           SimilarProcessGroups;       // Similar process groups
+    ProcessGroupsList      ProcessGroupsList;          // Process groups, will be constructed at runtime from SimilarProcessGroups
+    std::wstring           CheckForUpdatesOpt;         // Check for updates
+    bool                   PromptTerminateAll;         // Ask before terminating all processes
+    bool                   ShowSearchString;           // Show search string
+    bool                   ShowColHeader;              // Show column header
+    bool                   ShowColProcessName;         // Show column - Process Name
+    bool                   SystemTrayIconEnabled;      // Create system tray icon if enabled is true
     // ----------------------------------------------------------------------------
     // MouseHover Settings
     // ----------------------------------------------------------------------------
-    bool                   ShowProcessInfoTooltip;    // Show process info tooltip
-    bool                   ShowHighlightRect;         // Show mouse over item
-    bool                   ShowDeleteButton;          // Show delete button
+    bool                   ShowProcessInfoTooltip;     // Show process info tooltip
+    bool                   ShowHighlightRect;          // Show mouse over item
+    bool                   ShowDeleteButton;           // Show delete button
     // ----------------------------------------------------------------------------
     // Backtick Settings
     // ----------------------------------------------------------------------------
-    bool                   ProcessExclusionsEnabled;  // Process exclusions enabled
-    std::wstring           ProcessExclusions;         // Process exclusions string which are separated by /
-    ProcessExclusionList   ProcessExclusionList;      // Process exclusions list, will be constructed at runtime from ProcessExclusions
+    bool                   ProcessExclusionsEnabled;   // Process exclusions enabled
+    std::wstring           ProcessExclusions;          // Process exclusions string which are separated by /
+    ProcessExclusionList   ProcessExclusionList;       // Process exclusions list, will be constructed at runtime from ProcessExclusions
     // ----------------------------------------------------------------------------
     // Other Settings
     // ----------------------------------------------------------------------------
-    bool                   DisableAltTab;             // Disable AltTab hotkeys
+    bool                   DisableAltTab;              // Disable AltTab hotkeys
 
     AltTabSettings();
 

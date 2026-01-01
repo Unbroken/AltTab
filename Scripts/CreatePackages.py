@@ -149,6 +149,10 @@ Examples:
                         action='store_true',
                         help='Update version information before building')
 
+    parser.add_argument('--generate-version-header',
+                        action='store_true',
+                        help='Generate version header before building')
+
     # Clean build artifacts
     parser.add_argument('--clean-build',
                         action='store_true',
@@ -182,6 +186,8 @@ if __name__ == "__main__":
     # Update version information
     if args.update_version:
         VersionHelper.update_version_info()
+    elif args.generate_version_header:
+        VersionHelper.create_version_header()
 
     sln_path = str(SOLUTION_FILE)
     # Clean build artifacts
