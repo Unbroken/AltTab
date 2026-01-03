@@ -42,6 +42,7 @@ extern HANDLE                               g_hAltTabThread;
 extern DWORD                                g_idThreadAttachTo;
 extern AltTabSettings                       g_Settings;
 extern IsHungAppWindowFunc                  g_pfnIsHungAppWindow;
+extern HMENU                                g_hContextMenu;
 
 extern std::shared_ptr<log4cpp::Category>   g_Logger;
 

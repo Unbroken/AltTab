@@ -164,3 +164,5 @@ void InitImageList();
  * @return An integer value indicating which button was pressed by the user or an error code.
  */
 int ATMessageBoxW(HWND hWnd, LPCWSTR lpText, LPCWSTR lpCaption, UINT uType);
+
+void DestroyContextMenu();

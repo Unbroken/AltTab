@@ -524,8 +524,24 @@ LRESULT CALLBACK LLKeyboardProc(int nCode, WPARAM wParam, LPARAM lParam) {
                     return TRUE;
                 } 
                 
+                // We need to handle the `Alt + Escape` key to close the AltTab window, otherwise
+                // default behavior of 'Alt + Escape' will be executed which is switching to the
+                // next window in the Z order.
                 if (vkCode == VK_ESCAPE) {
                     AT_LOG_INFO("Escape Pressed!");
+
+                    // First check if there is any context menu is displayed.
+                    if (g_hContextMenu != nullptr) {
+                        // Actually here we need to destroy the context menu.
+                        // Get active window and send VK_ESCAPE to it.
+                        //HWND hActiveWnd = GetForegroundWindow();
+                        //AT_LOG_INFO("Sending WM_CLOSE to context menu window: %#010x", (UINT_PTR)hActiveWnd);
+                        //PostMessageW(hActiveWnd, WM_KEYDOWN, VK_ESCAPE, 0);
+                        //g_hContextMenu = nullptr;
+                        DestroyContextMenu();
+                        return TRUE;
+                    }
+
                     DestroyAltTabWindow();
                     return TRUE;
                 }
@@ -811,7 +827,7 @@ void TrayContextMenuItemHandler(HWND /*hWnd*/, HMENU hSubMenu, UINT menuItemId) 
 // ----------------------------------------------------------------------------
 // Show AltTab system tray context menu
 // ----------------------------------------------------------------------------
-void ShowTrayContextMenu(HWND hWnd, POINT pt) {
+bool ShowTrayContextMenu(HWND hWnd, POINT pt) {
     // Update general settings
     // Note: The current process is elevated but `RunAtStartup` is not enabled then IsRunElevated will be false.
     g_GeneralSettings = GetGeneralSettings();
@@ -822,6 +838,7 @@ void ShowTrayContextMenu(HWND hWnd, POINT pt) {
         g_GeneralSettings.IsRunAtStartup);
 
     HMENU hMenu = LoadMenu(g_hInstance, MAKEINTRESOURCE(IDC_TRAY_CONTEXTMENU));
+    UINT menuItemId = 0;
     if (hMenu) {
         HMENU hSubMenu = GetSubMenu(hMenu, 0);
         if (hSubMenu) {
@@ -881,15 +898,24 @@ void ShowTrayContextMenu(HWND hWnd, POINT pt) {
                 uFlags |= TPM_LEFTALIGN;
             }
 
+            // Set the global context menu handle
+            g_hContextMenu = hSubMenu;
+
             // Use TPM_RETURNCMD flag let TrackPopupMenuEx function return the 
             // menu item identifier of the user's selection in the return value.
             uFlags |= TPM_RETURNCMD;
-            UINT menuItemId = TrackPopupMenuEx(hSubMenu, uFlags, pt.x, pt.y, hWnd, nullptr);
+            menuItemId = TrackPopupMenuEx(hSubMenu, uFlags, pt.x, pt.y, hWnd, nullptr);
+            if (menuItemId != 0) {
+                // First, reset the global context menu handle before handling the menu item,
+                // so that other parts of the code won't be blocked.
+                g_hContextMenu = nullptr;
 
-            TrayContextMenuItemHandler(hWnd, hSubMenu, menuItemId);
+                TrayContextMenuItemHandler(hWnd, hSubMenu, menuItemId);
+            }
         }
         DestroyMenu(hMenu);
     }
+    return menuItemId != 0;
 }
 
 void ToggleCheckState(HMENU hMenu, UINT menuItemID) {
