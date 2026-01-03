@@ -22,7 +22,13 @@ LRESULT CALLBACK LLKeyboardProc(int nCode, WPARAM wp, LPARAM lp);
 
 LRESULT CALLBACK MainWndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam);
 
-void ShowTrayContextMenu(HWND hWnd, POINT pt);
+/*!
+ * @brief Show the AltTab system tray icon context menu.
+ * @param hWnd The handle to the window that owns the context menu.
+ * @param pt The screen coordinates where the context menu should be displayed.
+ * @return true if user selected a menu item, otherwise false.
+ */
+bool ShowTrayContextMenu(HWND hWnd, POINT pt);
 
 void TrayContextMenuItemHandler(HWND hWnd, HMENU hSubMenu, UINT menuItemId);
 

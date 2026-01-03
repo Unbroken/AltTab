@@ -5,4 +5,6 @@
 
 int g_nIconSize = 32;
 
+HMENU g_hContextMenu = nullptr;
+
 // clang-format on

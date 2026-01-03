@@ -1130,10 +1130,12 @@ LRESULT CALLBACK SearchStringSubclassProc(
         AT_LOG_INFO("WM_CONTEXTMENU");
         POINT pt;
         GetCursorPos(&pt);
-        ShowTrayContextMenu(g_hAltTabWnd, pt);
+        const bool result = ShowTrayContextMenu(g_hAltTabWnd, pt);
 
         // Close the AltTab window after showing the context menu and handling the menu command.
-        DestroyAltTabWindow();
+        if (result) {
+            DestroyAltTabWindow();
+        }
         return 0;
     } break;
 
@@ -1221,7 +1223,7 @@ LRESULT CALLBACK ListViewSubclassProc(
         // VK_ESCAPE
         // ----------------------------------------------------------------------------
         if (wParam == VK_ESCAPE) {
-            AT_LOG_INFO("VK_ESCAPE");
+            AT_LOG_INFO("VK_ESCAPE Pressed!, g_hContextMenu: %p", g_hContextMenu);
             DestroyAltTabWindow();
         }
         // ----------------------------------------------------------------------------
@@ -1583,13 +1585,23 @@ void ShowContextMenu(HWND hWnd, POINT pt) {
                 uFlags |= TPM_LEFTALIGN;
             }
 
+            // Set global context menu handle
+            g_hContextMenu = hSubMenu;
+
             // Use TPM_RETURNCMD flag let TrackPopupMenuEx function return the
             // menu item identifier of the user's selection in the return value.
             uFlags |= TPM_RETURNCMD;
             UINT menuItemId = TrackPopupMenuEx(hSubMenu, uFlags, pt.x, pt.y, hWnd, nullptr);
 
-            ContextMenuItemHandler(hWnd, hSubMenu, menuItemId);
+            if (menuItemId != 0) {
+                // First, reset the global context menu handle before handling the menu item,
+                // so that other parts of the code won't be blocked.
+                g_hContextMenu = nullptr;
+
+                ContextMenuItemHandler(hWnd, hSubMenu, menuItemId);
+            }
         }
+
         DestroyMenu(hMenu);
     }
 }
@@ -1951,6 +1963,7 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
     AT_LOG_TRACE;
 
     g_hAltTabWnd = hWnd;
+    AT_LOG_INFO("AltTab Window Handle: [%#08X]", g_hAltTabWnd);
 
     // Get screen width and height
     const int screenWidth  = GetSystemMetrics(SM_CXSCREEN);
@@ -2373,7 +2386,7 @@ BOOL ATW_OnNotify(HWND /*hwnd*/, int /*idFrom*/, NMHDR* pnmhdr) {
             HideCustomToolTip();
 
             // The mouse is over an item
-            const std::wstring tooltip = std::format(
+            std::wstring tooltip = std::format(
                 L"Title: {}\nPath: {}\nDescription: {} {}\nCompanyName: {}\nPID: {}",
                 g_AltTabWindows[g_MouseHoverIndex].Title,
                 g_AltTabWindows[g_MouseHoverIndex].FullPath,
@@ -2381,6 +2394,11 @@ BOOL ATW_OnNotify(HWND /*hwnd*/, int /*idFrom*/, NMHDR* pnmhdr) {
                 g_AltTabWindows[g_MouseHoverIndex].Version,
                 g_AltTabWindows[g_MouseHoverIndex].CompanyName,
                 g_AltTabWindows[g_MouseHoverIndex].PID);
+
+            // Add extra information (window handle) in debug mode
+#ifdef _DEBUG
+            tooltip += std::format(L"\nHWND: 0x{:08X}", (UINT_PTR)g_AltTabWindows[g_MouseHoverIndex].hWnd);
+#endif // _DEBUG
 
             // Show the tooltip just below the item
             RECT itemRect;
@@ -2486,6 +2504,13 @@ INT_PTR CALLBACK ATAboutDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
 void DestroyAltTabWindow(const bool activate) {
     if (g_hAltTabWnd == nullptr || g_hAltTabIsBeingClosed) {
         return;
+    }
+
+    // Check if the Context Menu is visible, then do not close the AltTab window
+    // No need to check while releasing the Alt key, but we can ignore that case
+    // because first context menu will be
+    if (g_hContextMenu != nullptr) {
+        DestroyContextMenu();
     }
 
     AT_LOG_INFO("DestroyAltTabWindow: activate = %d", activate);
@@ -2835,4 +2860,21 @@ int ATMessageBoxW(HWND hWnd, LPCWSTR lpText, LPCWSTR lpCaption, UINT uType) {
     g_bIgnoreWM_ACTIVATE = false;
 
     return result;
+}
+
+void DestroyContextMenu() {
+    if (g_hContextMenu) {
+        AT_LOG_INFO("g_hContextMenu: %p", g_hContextMenu);
+
+        // Get active window and send VK_ESCAPE to it to close the context menu.
+        HWND hActiveWnd = GetForegroundWindow();
+        AT_LOG_INFO("Sending WM_CLOSE to context menu window: %#010x", (UINT_PTR)hActiveWnd);
+        PostMessageW(hActiveWnd, WM_KEYDOWN, VK_ESCAPE, 0);
+
+        // Destroy the context menu
+        DestroyMenu(g_hContextMenu);
+
+        // Reset the global handle
+        g_hContextMenu = nullptr;
+    }
 }
