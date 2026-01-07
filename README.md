@@ -18,7 +18,7 @@ Hide / Un-hide windows.
 ### AltTab main window
 ![](https://github.com/lokeshgovindu/AltTab/blob/master/Screenshots/AltTab.gif)
 ### AltTab Settings
-![](https://github.com/lokeshgovindu/AltTab/blob/master/Screenshots/6.png)
+![](https://github.com/lokeshgovindu/AltTab/blob/master/Screenshots/6.Settings.png)
 ### AltBacktick
 ![](https://github.com/lokeshgovindu/AltTab/blob/master/Screenshots/7.AltBacktick.png)
 ### AltBacktick with SimilarProcessGroups
