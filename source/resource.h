@@ -64,6 +64,7 @@
 #define IDC_GROUPBOX_MOUSEHOVER         1039
 #define IDC_GROUP_BACKTICK              1040
 #define IDC_GROUPBOX_BACKTICK           1040
+#define IDC_COMBO_ICON_SIZE             1041
 #define ID_TRAYCONTEXTMENU_ABOUTALTTAB  32771
 #define ID_TRAYCONTEXTMENU_README       32772
 #define ID_TRAYCONTEXTMENU_HELP         32773
@@ -99,7 +100,7 @@
 #define _APS_NO_MFC                     1
 #define _APS_NEXT_RESOURCE_VALUE        136
 #define _APS_NEXT_COMMAND_VALUE         32801
-#define _APS_NEXT_CONTROL_VALUE         1041
+#define _APS_NEXT_CONTROL_VALUE         1042
 #define _APS_NEXT_SYMED_VALUE           110
 #endif
 #endif

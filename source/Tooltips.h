@@ -63,6 +63,9 @@ Process names are separated by forward slash (/).
 Example: notepad.exe/iexplore.exe
 )";
 
+const wchar_t* TT_ICON_SIZE                    = LR"(Icon size in pixels (16, 24, or 32).
+Smaller icons allow more rows to be visible.)";
+
 const wchar_t* TT_RESET_SETTINGS               = LR"(Reset all settings to defaults)";
 
 const wchar_t* TT_APPLY_SETTINGS               = LR"(Save the modified settings to INI file.)";

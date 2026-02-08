@@ -46,7 +46,7 @@ bool           g_hAltTabIsBeingClosed   = false;                // Is AltTab win
 HWND           g_hCustomToolTip         = nullptr;              // Custom tool tip
 bool           g_bIgnoreWM_ACTIVATE     = false;                // Ignore WM_ACTIVATE with WA_INACTIVE
 
-const int      COL_ICON_WIDTH           = 36;
+inline int     GetColIconWidth()              { return g_nIconSize + 4; }
 const int      COL_PROCNAME_WIDTH       = 180;
 
 // Forward declarations of functions included in this code module:
@@ -323,7 +323,7 @@ namespace AT {
                 if (lvItem.iImage >= 0) {
                     //  Calculate rect for icon
                     const int rowHeight = rcSub.bottom - rcSub.top;
-                    const int iconSize = 32;
+                    const int iconSize = g_nIconSize;
 
                     const int x = rcSub.left + 2;
                     const int y = rcSub.top + (rowHeight - iconSize) / 2; // vertically centered
@@ -661,8 +661,8 @@ void RefreshAltTabWindow() {
         }
     }
 
-    const int imageWidth = GetSystemMetrics(SM_CXICON);
-    const int imageHeight = GetSystemMetrics(SM_CYICON);
+    const int imageWidth = g_nIconSize;
+    const int imageHeight = g_nIconSize;
 
     // Create ImageList and add icons, assign a dummy ImageList to set the row height
     // The row height is determined by the height of the icons in the ImageList assigned as LVSIL_SMALL
@@ -857,13 +857,13 @@ static void CustomizeListView(HWND hListView, int dpi) {
     DWORD dwExStyle = LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER;
     ListView_SetExtendedListViewStyle(hListView, dwExStyle);
 
-    const int colTitleWidth = g_Settings.WindowWidth - COL_ICON_WIDTH;
+    const int colTitleWidth = g_Settings.WindowWidth - GetColIconWidth();
 
     // Add columns to the List View
     LVCOLUMN lvCol   = {0};
     lvCol.mask       = LVCF_TEXT | LVCF_WIDTH;
     lvCol.pszText    = (LPWSTR)L"#";
-    lvCol.cx         = ScaleValueForDPI(COL_ICON_WIDTH, dpi);
+    lvCol.cx         = ScaleValueForDPI(GetColIconWidth(), dpi);
     ListView_InsertColumn(hListView, 0, &lvCol);
 
     if (g_Settings.ShowColProcessName) {
@@ -2112,8 +2112,8 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
     }
 
     // Create ImageList and add icons
-    const int imageWidth = GetSystemMetrics(SM_CXICON);
-    const int imageHeight = GetSystemMetrics(SM_CYICON);
+    const int imageWidth = g_nIconSize;
+    const int imageHeight = g_nIconSize;
 
     // Create ImageList and add icons, assign a dummy ImageList to set the row height
     // The row height is determined by the height of the icons in the ImageList assigned as LVSIL_SMALL
@@ -2157,7 +2157,7 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
     } else {
         const int scrollBarWidth       = GetSystemMetrics(SM_CXVSCROLL);
         const int processNameWidth     = GetColProcessNameWidth();
-        const int colTitleWidth        = g_Settings.WindowWidth - (COL_ICON_WIDTH + processNameWidth) - scrollBarWidth - 2;
+        const int colTitleWidth        = g_Settings.WindowWidth - (GetColIconWidth() + processNameWidth) - scrollBarWidth - 2;
         const int numberOfVisibleItems = (g_Settings.WindowHeight - itemHeight + 1) / itemHeight;
         const int lvHeight             = numberOfVisibleItems * itemHeight + headerHeight;
 
@@ -2459,7 +2459,7 @@ INT_PTR CALLBACK ATAboutDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
         SetWindowLong(hDlg, GWL_EXSTYLE, GetWindowLong(hDlg, GWL_EXSTYLE) | WS_EX_APPWINDOW);
 
         std::wstring productInfo = std::format(L"<a href=\"{}\">{}</a> v{}", AT_PRODUCT_PAGE, AT_PRODUCT_NAMEW, AT_VERSION_TEXTW);
-        std::wstring copyright   = std::format(L"Copyright © {} <a href=\"{}\">{}</a>", AT_PRODUCT_YEARW, AT_PRODUCT_PAGE, AT_AUTHOR_NAME);
+        std::wstring copyright   = std::format(L"Copyright ï¿½ {} <a href=\"{}\">{}</a>", AT_PRODUCT_YEARW, AT_PRODUCT_PAGE, AT_AUTHOR_NAME);
 
         SetDlgItemTextW(hDlg, IDC_SYSLINK_ABOUT_PRODUCT_NAME, productInfo.c_str());
         SetDlgItemTextW(hDlg, IDC_SYSLINK_ABOUT_COPYRIGHT   , copyright.c_str());
@@ -2829,7 +2829,14 @@ HBITMAP LoadPngAsHBITMAP(HINSTANCE hInst, int resID, int cx, int cy) {
 }
 
 void InitImageList() {
-    const int imageSize = 32;
+    const int imageSize = g_nIconSize;
+
+    // Destroy the old image list if it exists (e.g., when settings are reloaded)
+    if (g_hImageList) {
+        ImageList_Destroy(g_hImageList);
+        g_hImageList = nullptr;
+    }
+
     g_hImageList = ImageList_Create(imageSize, imageSize, ILC_COLOR32 | ILC_MASK, 1, 1);
     if (!g_hImageList) {
         AT_LOG_ERROR("Failed to create image list.");

@@ -66,6 +66,7 @@ namespace {
     const wchar_t* SHOW_PROCESS_INFO_TOOLTIP = L"ShowProcessInfoTooltip"  ;
     const wchar_t* SHOW_HIGHLIGHT_RECT       = L"ShowHighlightRect"       ;
     const wchar_t* SHOW_DELETE_BUTTON        = L"ShowDeleteButton"        ;
+    const wchar_t* ICON_SIZE                 = L"IconSize"                ;
 
     const wchar_t* CHECK_FOR_UPDATES         = L"CheckForUpdates"         ;
     const wchar_t* SYSTEM_TRAY_ICON_ENABLED  = L"SystemTrayIconEnabled"   ;
@@ -133,6 +134,7 @@ void AltTabSettings::Reset() {
     ShowSearchString           = DEFAULT_SHOW_SEARCH_STRING         ;
     ShowColHeader              = DEFAULT_SHOW_COL_HEADER            ;
     ShowColProcessName         = DEFAULT_SHOW_COL_PROCESSNAME       ;
+    IconSize                   = DEFAULT_ICON_SIZE                  ;
     ShowProcessInfoTooltip     = DEFAULT_MH_SHOW_PROCESSINFO_TOOLTIP;
     SystemTrayIconEnabled      = DEFAULT_SYSTEM_TRAY_ICON_ENABLED   ;
     ProcessExclusionsEnabled   = DEFAULT_PROCESS_EXCLUSIONS_ENABLED ;
@@ -233,6 +235,7 @@ void AddTooltips(HWND hDlg) {
     ADD_TOOLTIP(IDC_CHECK_FOR_UPDATES                , TT_CHECK_FOR_UPDATES         );
     ADD_TOOLTIP(IDC_CHECK_PROCESS_EXCLUSIONS         , TT_CHECK_PROCESS_EXCLUSIONS  );
     ADD_TOOLTIP(IDC_EDIT_PROCESS_EXCLUSIONS          , TT_EDIT_PROCESS_EXCLUSIONS   );
+    ADD_TOOLTIP(IDC_COMBO_ICON_SIZE                  , TT_ICON_SIZE                 );
     ADD_TOOLTIP(IDC_BUTTON_APPLY                     , TT_APPLY_SETTINGS            );
     ADD_TOOLTIP(IDOK                                 , TT_OK_SETTINGS               );
     ADD_TOOLTIP(IDCANCEL                             , TT_CANCEL_SETTINGS           );
@@ -550,6 +553,7 @@ void ATSettingsToFile(const std::wstring& iniFile) {
     WriteSetting(iniFile, GENERAL           , SHOW_SEARCH_STRING       , g_Settings.ShowSearchString        );
     WriteSetting(iniFile, GENERAL           , SHOW_COL_HEADER          , g_Settings.ShowColHeader           );
     WriteSetting(iniFile, GENERAL           , SHOW_COL_PROCESSNAME     , g_Settings.ShowColProcessName      );
+    WriteSetting(iniFile, GENERAL           , ICON_SIZE                , g_Settings.IconSize                );
     WriteSetting(iniFile, GENERAL           , CHECK_FOR_UPDATES        , g_Settings.CheckForUpdatesOpt      );
     WriteSetting(iniFile, GENERAL           , SYSTEM_TRAY_ICON_ENABLED , g_Settings.SystemTrayIconEnabled   );
     WriteSetting(iniFile, MOUSE_HOVER       , SHOW_PROCESS_INFO_TOOLTIP, g_Settings.ShowProcessInfoTooltip  );
@@ -600,6 +604,7 @@ void ATLoadSettings() {
     ReadSetting(iniFile, GENERAL           , SHOW_SEARCH_STRING       , DEFAULT_SHOW_SEARCH_STRING         , g_Settings.ShowSearchString        );
     ReadSetting(iniFile, GENERAL           , SHOW_COL_HEADER          , DEFAULT_SHOW_COL_HEADER            , g_Settings.ShowColHeader           );
     ReadSetting(iniFile, GENERAL           , SHOW_COL_PROCESSNAME     , DEFAULT_SHOW_COL_PROCESSNAME       , g_Settings.ShowColProcessName      );
+    ReadSetting(iniFile, GENERAL           , ICON_SIZE                , DEFAULT_ICON_SIZE                  , g_Settings.IconSize                );
     ReadSetting(iniFile, GENERAL           , CHECK_FOR_UPDATES        , DEFAULT_CHECKFORUPDATES            , g_Settings.CheckForUpdatesOpt      );
     ReadSetting(iniFile, GENERAL           , SYSTEM_TRAY_ICON_ENABLED , DEFAULT_SYSTEM_TRAY_ICON_ENABLED   , g_Settings.SystemTrayIconEnabled   );
     ReadSetting(iniFile, MOUSE_HOVER       , SHOW_PROCESS_INFO_TOOLTIP, DEFAULT_MH_SHOW_PROCESSINFO_TOOLTIP, g_Settings.ShowProcessInfoTooltip  );
@@ -631,6 +636,13 @@ void ATLoadSettings() {
     // Always split and convert to lower case, then it is easy while checking
     g_Settings.ProcessExclusionList.clear();
     g_Settings.ProcessExclusionList = Split(ToLower(g_Settings.ProcessExclusions), L"/");
+
+    // Validate and apply icon size (only 16, 24, 32 are valid)
+    if (g_Settings.IconSize != 16 && g_Settings.IconSize != 24 && g_Settings.IconSize != 32) {
+        g_Settings.IconSize = DEFAULT_ICON_SIZE;
+    }
+    g_nIconSize = g_Settings.IconSize;
+    InitImageList();
 
     // Initialize additional settings
     g_AltBacktickWndInfo.hWnd   = nullptr;
@@ -732,6 +744,9 @@ void ATReadSettingsFromUI(HWND hDlg, AltTabSettings& settings) {
     settings.ProcessExclusions         = GetDlgItemTextEx  (hDlg, IDC_EDIT_PROCESS_EXCLUSIONS          );
     const int selectedIndex            = ComboBox_GetCurSel(GetDlgItem(hDlg, IDC_CHECK_FOR_UPDATES));
     settings.CheckForUpdatesOpt        = AltTabSettings::CheckForUpdatesOptions[max(selectedIndex, 0)];
+    const int iconSizeOptions[]        = { 16, 24, 32 };
+    const int iconSizeIndex            = ComboBox_GetCurSel(GetDlgItem(hDlg, IDC_COMBO_ICON_SIZE));
+    settings.IconSize                  = iconSizeOptions[max(iconSizeIndex, 0)];
 }
 
 /**
@@ -772,6 +787,7 @@ void ATLogSettings(const AltTabSettings& settings) {
     AT_LOG_DEBUG("  ShowSearchString          : [%s]", BOOL_TO_CSTR(settings.ShowSearchString));
     AT_LOG_DEBUG("  ShowColHeader             : [%s]", BOOL_TO_CSTR(settings.ShowColHeader));
     AT_LOG_DEBUG("  ShowColProcessName        : [%s]", BOOL_TO_CSTR(settings.ShowColProcessName));
+    AT_LOG_DEBUG("  IconSize                  : [%d]", settings.IconSize);
     AT_LOG_DEBUG("  ShowMouseOverItem         : [%s]", BOOL_TO_CSTR(settings.ShowHighlightRect));
     AT_LOG_DEBUG("[MouseHover]");
     AT_LOG_DEBUG("  ShowProcessInfoTooltip    : [%s]", BOOL_TO_CSTR(settings.ShowProcessInfoTooltip));
@@ -811,6 +827,7 @@ bool AreSettingsModified(HWND hDlg) {
         settings.ShowSearchString         != g_Settings.ShowSearchString         ||
         settings.ShowColHeader            != g_Settings.ShowColHeader            ||
         settings.ShowColProcessName       != g_Settings.ShowColProcessName       ||
+        settings.IconSize                 != g_Settings.IconSize                 ||
         settings.HKAltTabEnabled          != g_Settings.HKAltTabEnabled          ||
         settings.HKAltBacktickEnabled     != g_Settings.HKAltBacktickEnabled     ||
         settings.HKAltCtrlTabEnabled      != g_Settings.HKAltCtrlTabEnabled      ||
@@ -933,6 +950,30 @@ void ATSettingsInitDialog(HWND hDlg, const AltTabSettings& settings) {
         ComboBox_AddString(hComboBox, opt.c_str());
     }
     ComboBox_SetCurSel(hComboBox, settings.GetCheckForUpdatesIndex());
+
+    // Create Icon Size label and combo box programmatically
+    // Convert dialog units to pixels for proper alignment with existing controls
+    RECT rcLabel = { 210, 145, 210 + 40, 145 + 8 };   // Same x as right-side checkboxes, same row as Check for Updates
+    RECT rcCombo = { 255, 143, 255 + 44, 143 + 60 };
+    MapDialogRect(hDlg, &rcLabel);
+    MapDialogRect(hDlg, &rcCombo);
+    HWND hIconSizeLabel = CreateWindowW(L"STATIC", L"Icon Size",
+        WS_CHILD | WS_VISIBLE | SS_LEFT,
+        rcLabel.left, rcLabel.top, rcLabel.right - rcLabel.left, rcLabel.bottom - rcLabel.top,
+        hDlg, (HMENU)IDC_STATIC, g_hInstance, nullptr);
+    HWND hIconSizeCombo = CreateWindowW(L"COMBOBOX", nullptr,
+        WS_CHILD | WS_VISIBLE | CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP,
+        rcCombo.left, rcCombo.top, rcCombo.right - rcCombo.left, rcCombo.bottom - rcCombo.top,
+        hDlg, (HMENU)IDC_COMBO_ICON_SIZE, g_hInstance, nullptr);
+    // Set the same font as the dialog
+    HFONT hDlgFont = (HFONT)SendMessageW(hDlg, WM_GETFONT, 0, 0);
+    SendMessageW(hIconSizeLabel, WM_SETFONT, (WPARAM)hDlgFont, TRUE);
+    SendMessageW(hIconSizeCombo, WM_SETFONT, (WPARAM)hDlgFont, TRUE);
+    ComboBox_AddString(hIconSizeCombo, L"16");
+    ComboBox_AddString(hIconSizeCombo, L"24");
+    ComboBox_AddString(hIconSizeCombo, L"32");
+    int iconSizeIndex = (settings.IconSize == 16) ? 0 : (settings.IconSize == 24) ? 1 : 2;
+    ComboBox_SetCurSel(hIconSizeCombo, iconSizeIndex);
  
     // Center the dialog on the screen
     const int screenWidth  = GetSystemMetrics(SM_CXSCREEN);

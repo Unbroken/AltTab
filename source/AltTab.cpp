@@ -142,7 +142,6 @@ int APIENTRY wWinMain(
     // Initialize the common things like common controls, GDI+ etc.
     InitGDIPlus();
     InitializeCOM();
-    InitImageList();
 
     // Load GeneralSettings
     g_GeneralSettings = GetGeneralSettings();
