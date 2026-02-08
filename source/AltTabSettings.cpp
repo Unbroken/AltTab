@@ -60,6 +60,7 @@ namespace {
     const wchar_t* WINDOW_TRANSPARENCY       = L"WindowTransparency"      ;
     const wchar_t* WINDOW_WIDTH_PERCENTAGE   = L"WindowWidthPercentage"   ;
     const wchar_t* WINDOW_HEIGHT_PERCENTAGE  = L"WindowHeightPercentage"  ;
+    const wchar_t* WINDOW_MAX_WIDTH          = L"WindowMaxWidth"          ;
     const wchar_t* SHOW_SEARCH_STRING        = L"ShowSearchString"        ;
     const wchar_t* SHOW_COL_HEADER           = L"ShowColHeader"           ;
     const wchar_t* SHOW_COL_PROCESSNAME      = L"ShowColProcessName"      ;
@@ -550,6 +551,7 @@ void ATSettingsToFile(const std::wstring& iniFile) {
     WriteSetting(iniFile, GENERAL           , WINDOW_TRANSPARENCY      , g_Settings.Transparency            );
     WriteSetting(iniFile, GENERAL           , WINDOW_WIDTH_PERCENTAGE  , g_Settings.WidthPercentage         );
     WriteSetting(iniFile, GENERAL           , WINDOW_HEIGHT_PERCENTAGE , g_Settings.HeightPercentage        );
+    WriteSetting(iniFile, GENERAL           , WINDOW_MAX_WIDTH         , g_Settings.WindowMaxWidth          );
     WriteSetting(iniFile, GENERAL           , SHOW_SEARCH_STRING       , g_Settings.ShowSearchString        );
     WriteSetting(iniFile, GENERAL           , SHOW_COL_HEADER          , g_Settings.ShowColHeader           );
     WriteSetting(iniFile, GENERAL           , SHOW_COL_PROCESSNAME     , g_Settings.ShowColProcessName      );
@@ -601,6 +603,7 @@ void ATLoadSettings() {
     ReadSetting(iniFile, GENERAL           , WINDOW_TRANSPARENCY      , DEFAULT_TRANSPARENCY               , g_Settings.Transparency            );
     ReadSetting(iniFile, GENERAL           , WINDOW_WIDTH_PERCENTAGE  , DEFAULT_WIDTH                      , g_Settings.WidthPercentage         );
     ReadSetting(iniFile, GENERAL           , WINDOW_HEIGHT_PERCENTAGE , DEFAULT_HEIGHT                     , g_Settings.HeightPercentage        );
+    ReadSetting(iniFile, GENERAL           , WINDOW_MAX_WIDTH         , DEFAULT_WINDOW_MAX_WIDTH           , g_Settings.WindowMaxWidth          );
     ReadSetting(iniFile, GENERAL           , SHOW_SEARCH_STRING       , DEFAULT_SHOW_SEARCH_STRING         , g_Settings.ShowSearchString        );
     ReadSetting(iniFile, GENERAL           , SHOW_COL_HEADER          , DEFAULT_SHOW_COL_HEADER            , g_Settings.ShowColHeader           );
     ReadSetting(iniFile, GENERAL           , SHOW_COL_PROCESSNAME     , DEFAULT_SHOW_COL_PROCESSNAME       , g_Settings.ShowColProcessName      );

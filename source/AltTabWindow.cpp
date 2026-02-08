@@ -1965,13 +1965,22 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
     g_hAltTabWnd = hWnd;
     AT_LOG_INFO("AltTab Window Handle: [%#08X]", g_hAltTabWnd);
 
+    // Get a device context and DPI early so we can scale WindowMaxWidth
+    HDC hdc = GetDC(hWnd);
+    int dpi = GetDeviceCaps(hdc, LOGPIXELSX);
+
     // Get screen width and height
     const int screenWidth  = GetSystemMetrics(SM_CXSCREEN);
     const int screenHeight = GetSystemMetrics(SM_CYSCREEN);
 
     // Compute the window size (e.g., 80% of the screen width and height)
-    const int windowWidth = static_cast<int>(screenWidth * g_Settings.WidthPercentage * 0.01);
+    int windowWidth = static_cast<int>(screenWidth * g_Settings.WidthPercentage * 0.01);
     const int windowHeight = static_cast<int>(screenHeight * g_Settings.HeightPercentage * 0.01);
+
+    // Apply WindowMaxWidth cap (specified in pixels at 100% DPI, scaled to current DPI)
+    if (g_Settings.WindowMaxWidth > 0) {
+        windowWidth = min(windowWidth, ScaleValueForDPI(g_Settings.WindowMaxWidth, dpi));
+    }
 
     // Compute the window position (centered on the screen)
     const int windowX = (screenWidth - windowWidth) / 2;
@@ -1985,8 +1994,6 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
     int searchStringHeight = 24;
 
     // Calculate the required height for the static control based on font size
-    HDC hdc = GetDC(hWnd);
-
     g_hSSFont = CreateFontEx(hdc, g_Settings.SSFontName, g_Settings.SSFontSize, g_Settings.SSFontStyle);
     g_hLVFont = CreateFontEx(hdc, g_Settings.LVFontName, g_Settings.LVFontSize, g_Settings.LVFontStyle);
 
@@ -1996,9 +2003,6 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
     GetTextMetrics(hdc, &tm);
     searchStringHeight = (int)(tm.tmHeight + tm.tmExternalLeading);
     AT_LOG_INFO("searchStringHeight: %d", searchStringHeight);
-
-    // Get the DPI of the window/screen
-    int dpi = GetDeviceCaps(hdc, LOGPIXELSX);
 
     ReleaseDC(hWnd, hdc);
 
@@ -2078,8 +2082,8 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
     // Subclass the ListView control
     SetWindowSubclass(hListView, ListViewSubclassProc, 1, 0);
 
-    const int wndWidth  = (int)(screenWidth * g_Settings.WidthPercentage * 0.01);
-    const int wndHeight = (int)(screenHeight * g_Settings.HeightPercentage * 0.01);
+    const int wndWidth  = windowWidth;
+    const int wndHeight = windowHeight;
 
     g_Settings.WindowWidth  = wndWidth;
     g_Settings.WindowHeight = wndHeight;

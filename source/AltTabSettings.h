@@ -37,6 +37,7 @@ using StringList           = std::vector<std::wstring>;
 #define DEFAULT_LV_HIGHLIGHT_BG_COLOR        0xFFFFBF                // RGB(0xFF, 0xFF, 0xBF) Yellow background for match
 #define DEFAULT_WIDTH                        45
 #define DEFAULT_HEIGHT                       45
+#define DEFAULT_WINDOW_MAX_WIDTH             0
 #define DEFAULT_FUZZYMATCHPERCENT            60
 #define DEFAULT_TRANSPARENCY                 222
 #define DEFAULT_SIMILARPROCESSGROUPS         L"notepad.exe/notepad++.exe|iexplore.exe/msedge.exe/chrome.exe/firefox.exe|explorer.exe/xplorer2_lite.exe/xplorer2.exe/xplorer2_64.exe|cmd.exe/WindowsTerminal.exe/conemu.exe/conemu64.exe"
@@ -97,6 +98,7 @@ struct AltTabSettings {
     // ----------------------------------------------------------------------------
     int                    WidthPercentage;            // Window width in percentage of the actual screen width
     int                    HeightPercentage;           // Window height in percentage of the actual screen height
+    int                    WindowMaxWidth;             // Max window width in pixels at 100% DPI (0 = no limit)
     int                    WindowWidth;                // Window width, will be calculated at runtime
     int                    WindowHeight;               // Window height, will be calculated at runtime
     int                    FuzzyMatchPercent;          // Fuzzy match percent
