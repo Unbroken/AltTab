@@ -454,6 +454,25 @@ BOOL CALLBACK EnumWindowsProc(HWND hWnd, LPARAM lParam) {
                         title += L" (Not Responding)";
                     }
 
+                    if (g_Settings.ReverseWindowTitle) {
+                        std::vector<std::wstring> segments;
+                        size_t start = 0;
+                        size_t pos;
+                        while ((pos = title.find(L" - ", start)) != std::wstring::npos) {
+                            segments.push_back(title.substr(start, pos - start));
+                            start = pos + 3;
+                        }
+                        if (segments.size() > 0) {
+                            segments.push_back(title.substr(start));
+                            std::reverse(segments.begin(), segments.end());
+                            title.clear();
+                            for (size_t i = 0; i < segments.size(); i++) {
+                                if (i > 0) title += L" - ";
+                                title += segments[i];
+                            }
+                        }
+                    }
+
                     AltTabWindowData item;
 
                     item.hWnd              = hWnd;

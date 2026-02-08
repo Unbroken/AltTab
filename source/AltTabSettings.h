@@ -51,6 +51,7 @@ using StringList           = std::vector<std::wstring>;
 #define DEFAULT_MH_SHOW_DELETE_BUTTON        true
 #define DEFAULT_SYSTEM_TRAY_ICON_ENABLED     true
 #define DEFAULT_ICON_SIZE                    32
+#define DEFAULT_REVERSE_WINDOW_TITLE         false
 #define DEFAULT_PROCESS_EXCLUSIONS_ENABLED   false
 #define DEFAULT_PROCESS_EXCLUSIONS           L""
 
@@ -112,6 +113,7 @@ struct AltTabSettings {
     bool                   ShowColProcessName;         // Show column - Process Name
     int                    IconSize;                   // Icon size in pixels (16, 24, or 32)
     bool                   SystemTrayIconEnabled;      // Create system tray icon if enabled is true
+    bool                   ReverseWindowTitle;         // Reverse window title segments around " - "
     // ----------------------------------------------------------------------------
     // MouseHover Settings
     // ----------------------------------------------------------------------------

@@ -71,6 +71,7 @@ namespace {
 
     const wchar_t* CHECK_FOR_UPDATES         = L"CheckForUpdates"         ;
     const wchar_t* SYSTEM_TRAY_ICON_ENABLED  = L"SystemTrayIconEnabled"   ;
+    const wchar_t* REVERSE_WINDOW_TITLE      = L"ReverseWindowTitle"      ;
     const wchar_t* ALTTAB_ENABLED            = L"AltTabEnabled"           ;
     const wchar_t* ALTBACKTICK_ENABLED       = L"AltBacktickEnabled"      ;
     const wchar_t* ALTCTRLTAB_ENABLED        = L"AltCtrlTabEnabled"       ;
@@ -138,6 +139,7 @@ void AltTabSettings::Reset() {
     IconSize                   = DEFAULT_ICON_SIZE                  ;
     ShowProcessInfoTooltip     = DEFAULT_MH_SHOW_PROCESSINFO_TOOLTIP;
     SystemTrayIconEnabled      = DEFAULT_SYSTEM_TRAY_ICON_ENABLED   ;
+    ReverseWindowTitle         = DEFAULT_REVERSE_WINDOW_TITLE       ;
     ProcessExclusionsEnabled   = DEFAULT_PROCESS_EXCLUSIONS_ENABLED ;
     ProcessExclusions          = DEFAULT_PROCESS_EXCLUSIONS         ;
 
@@ -558,6 +560,7 @@ void ATSettingsToFile(const std::wstring& iniFile) {
     WriteSetting(iniFile, GENERAL           , ICON_SIZE                , g_Settings.IconSize                );
     WriteSetting(iniFile, GENERAL           , CHECK_FOR_UPDATES        , g_Settings.CheckForUpdatesOpt      );
     WriteSetting(iniFile, GENERAL           , SYSTEM_TRAY_ICON_ENABLED , g_Settings.SystemTrayIconEnabled   );
+    WriteSetting(iniFile, GENERAL           , REVERSE_WINDOW_TITLE     , g_Settings.ReverseWindowTitle      );
     WriteSetting(iniFile, MOUSE_HOVER       , SHOW_PROCESS_INFO_TOOLTIP, g_Settings.ShowProcessInfoTooltip  );
     WriteSetting(iniFile, MOUSE_HOVER       , SHOW_HIGHLIGHT_RECT      , g_Settings.ShowHighlightRect       );
     WriteSetting(iniFile, MOUSE_HOVER       , SHOW_DELETE_BUTTON       , g_Settings.ShowDeleteButton        );
@@ -610,6 +613,7 @@ void ATLoadSettings() {
     ReadSetting(iniFile, GENERAL           , ICON_SIZE                , DEFAULT_ICON_SIZE                  , g_Settings.IconSize                );
     ReadSetting(iniFile, GENERAL           , CHECK_FOR_UPDATES        , DEFAULT_CHECKFORUPDATES            , g_Settings.CheckForUpdatesOpt      );
     ReadSetting(iniFile, GENERAL           , SYSTEM_TRAY_ICON_ENABLED , DEFAULT_SYSTEM_TRAY_ICON_ENABLED   , g_Settings.SystemTrayIconEnabled   );
+    ReadSetting(iniFile, GENERAL           , REVERSE_WINDOW_TITLE     , DEFAULT_REVERSE_WINDOW_TITLE       , g_Settings.ReverseWindowTitle      );
     ReadSetting(iniFile, MOUSE_HOVER       , SHOW_PROCESS_INFO_TOOLTIP, DEFAULT_MH_SHOW_PROCESSINFO_TOOLTIP, g_Settings.ShowProcessInfoTooltip  );
     ReadSetting(iniFile, MOUSE_HOVER       , SHOW_HIGHLIGHT_RECT      , DEFAULT_MH_SHOW_HIGHLIGHT_RECT     , g_Settings.ShowHighlightRect       );
     ReadSetting(iniFile, MOUSE_HOVER       , SHOW_DELETE_BUTTON       , DEFAULT_MH_SHOW_DELETE_BUTTON      , g_Settings.ShowDeleteButton        );
@@ -791,6 +795,7 @@ void ATLogSettings(const AltTabSettings& settings) {
     AT_LOG_DEBUG("  ShowColHeader             : [%s]", BOOL_TO_CSTR(settings.ShowColHeader));
     AT_LOG_DEBUG("  ShowColProcessName        : [%s]", BOOL_TO_CSTR(settings.ShowColProcessName));
     AT_LOG_DEBUG("  IconSize                  : [%d]", settings.IconSize);
+    AT_LOG_DEBUG("  ReverseWindowTitle        : [%s]", BOOL_TO_CSTR(settings.ReverseWindowTitle));
     AT_LOG_DEBUG("  ShowMouseOverItem         : [%s]", BOOL_TO_CSTR(settings.ShowHighlightRect));
     AT_LOG_DEBUG("[MouseHover]");
     AT_LOG_DEBUG("  ShowProcessInfoTooltip    : [%s]", BOOL_TO_CSTR(settings.ShowProcessInfoTooltip));
