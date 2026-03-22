@@ -63,6 +63,7 @@ extern int                                  g_nImgCloseInactiveInd;
 extern RECT                                 g_rcBtnClose;
 extern bool                                 g_IsMouseOverCloseButton;
 extern int                                  g_nIconSize;
+extern int                                  g_nDpi;
 
 // Colors
 extern COLORREF g_crSSBackground;

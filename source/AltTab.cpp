@@ -105,11 +105,12 @@ int APIENTRY wWinMain(
 
     g_hInstance = hInstance; // Store instance handle in our global variable
 
-    // Set process DPI awareness
-    if (!SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE)) {
-        // Handle error if setting DPI awareness fails
-        // For simplicity, you may just display a message box
-        AT_LOG_ERROR("Failed to set DPI awareness!");
+    // Set process DPI awareness (V2 provides better automatic scaling of non-client areas and dialogs)
+    if (!SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2)) {
+        // Fall back to V1 if V2 is not available (pre-Windows 10 1703)
+        if (!SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE)) {
+            AT_LOG_ERROR("Failed to set DPI awareness!");
+        }
     }
 
 #if 0

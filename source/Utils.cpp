@@ -233,6 +233,14 @@ int ScaleValueForDPI(int value, int dpi) {
 
 // Helper function to get the DPI of a window
 int GetDPIForWindow(HWND hWnd) {
+    // GetDpiForWindow returns the correct per-monitor DPI (available since Windows 10 1607)
+    if (hWnd) {
+        UINT dpi = ::GetDpiForWindow(hWnd);
+        if (dpi > 0) {
+            return static_cast<int>(dpi);
+        }
+    }
+    // Fallback to system DPI
     HDC hdc = GetDC(hWnd);
     int dpi = GetDeviceCaps(hdc, LOGPIXELSX);
     ReleaseDC(hWnd, hdc);

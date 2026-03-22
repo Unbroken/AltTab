@@ -163,17 +163,18 @@ INT_PTR CALLBACK ATCheckForUpdatesDlgProc(HWND hDlg, UINT message, WPARAM wParam
         SendMessageW(hDlg, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
         SendMessageW(hDlg, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
 
-        // Center the dialog on the screen
-        int screenWidth  = GetSystemMetrics(SM_CXSCREEN);
-        int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+        // Center the dialog on the current monitor
+        HMONITOR hMon = MonitorFromWindow(hDlg, MONITOR_DEFAULTTOPRIMARY);
+        MONITORINFO monInfo = { sizeof(monInfo) };
+        GetMonitorInfo(hMon, &monInfo);
         RECT dlgRect;
         GetWindowRect(hDlg, &dlgRect);
 
         int dlgWidth  = dlgRect.right - dlgRect.left;
         int dlgHeight = dlgRect.bottom - dlgRect.top;
 
-        int posX = (screenWidth  - dlgWidth ) / 2;
-        int posY = (screenHeight - dlgHeight) / 2;
+        int posX = monInfo.rcWork.left + (monInfo.rcWork.right - monInfo.rcWork.left - dlgWidth) / 2;
+        int posY = monInfo.rcWork.top + (monInfo.rcWork.bottom - monInfo.rcWork.top - dlgHeight) / 2;
 
         SetWindowPos(hDlg, HWND_TOP, posX, posY, 0, 0, SWP_NOSIZE);
 

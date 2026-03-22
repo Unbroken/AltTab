@@ -912,7 +912,8 @@ void ATSettingsInitDialog(HWND hDlg, const AltTabSettings& settings) {
     SetDlgItemText    (hDlg, IDC_EDIT_SS_BANNER_TEXT          , settings.SSCueBannerText.c_str()     );
     SetDlgItemText    (hDlg, IDC_EDIT_SIMILAR_PROCESS_GROUPS  , settings.SimilarProcessGroups.c_str());
  
-    HFONT    hFont     = CreateFontW(14, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
+    int dpi = GetDPIForWindow(hDlg);
+    HFONT    hFont     = CreateFontW(ScaleValueForDPI(10, dpi), 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE,
                                      DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
                                      DEFAULT_QUALITY, DEFAULT_PITCH | FF_SWISS, L"Lucida Console");
     HWND     hEditBox1 = GetDlgItem(hDlg, IDC_EDIT_SIMILAR_PROCESS_GROUPS);
@@ -983,18 +984,19 @@ void ATSettingsInitDialog(HWND hDlg, const AltTabSettings& settings) {
     int iconSizeIndex = (settings.IconSize == 16) ? 0 : (settings.IconSize == 24) ? 1 : 2;
     ComboBox_SetCurSel(hIconSizeCombo, iconSizeIndex);
  
-    // Center the dialog on the screen
-    const int screenWidth  = GetSystemMetrics(SM_CXSCREEN);
-    const int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+    // Center the dialog on the current monitor
+    HMONITOR hMon = MonitorFromWindow(hDlg, MONITOR_DEFAULTTOPRIMARY);
+    MONITORINFO monInfo = { sizeof(monInfo) };
+    GetMonitorInfo(hMon, &monInfo);
     RECT dlgRect;
     GetWindowRect(hDlg, &dlgRect);
- 
+
     const int dlgWidth  = dlgRect.right  - dlgRect.left;
     const int dlgHeight = dlgRect.bottom - dlgRect.top;
- 
-    const int posX      = (screenWidth  - dlgWidth ) / 2;
-    const int posY      = (screenHeight - dlgHeight) / 2;
- 
+
+    const int posX = monInfo.rcWork.left + (monInfo.rcWork.right - monInfo.rcWork.left - dlgWidth) / 2;
+    const int posY = monInfo.rcWork.top + (monInfo.rcWork.bottom - monInfo.rcWork.top - dlgHeight) / 2;
+
     SetWindowPos(hDlg, HWND_TOP, posX, posY, 0, 0, SWP_NOSIZE);
  
     // Set the dialog as an app window, otherwise not displayed in task bar

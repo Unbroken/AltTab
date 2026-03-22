@@ -46,8 +46,9 @@ bool           g_hAltTabIsBeingClosed   = false;                // Is AltTab win
 HWND           g_hCustomToolTip         = nullptr;              // Custom tool tip
 bool           g_bIgnoreWM_ACTIVATE     = false;                // Ignore WM_ACTIVATE with WA_INACTIVE
 
-inline int     GetColIconWidth()              { return g_nIconSize + 4; }
-const int      COL_PROCNAME_WIDTH       = 180;
+// Scale a pixel value from 96 DPI to the current DPI
+inline int     DPIScale(int value)             { return ScaleValueForDPI(value, g_nDpi); }
+inline int     GetColIconWidth()               { return DPIScale(g_nIconSize + 4); }
 
 // Forward declarations of functions included in this code module:
 INT_PTR CALLBACK ATAboutDlgProc        (HWND, UINT, WPARAM, LPARAM);
@@ -59,6 +60,7 @@ static void      ContextMenuItemHandler(HWND hWnd, HMENU hSubMenu, UINT menuItem
 static BOOL      TerminateProcessEx    (DWORD pid);
 static void      ATCloseWindow         (const int index);
 static bool      IsExcludedProcess     (const std::wstring& processName);
+int              GetColProcessNameWidth();
 
 // Window procedure functions for individual messages
 static void    ATW_OnActivate        (HWND hwnd, UINT state, HWND hwndActDeact, BOOL fMinimized);
@@ -323,9 +325,9 @@ namespace AT {
                 if (lvItem.iImage >= 0) {
                     //  Calculate rect for icon
                     const int rowHeight = rcSub.bottom - rcSub.top;
-                    const int iconSize = g_nIconSize;
+                    const int iconSize = DPIScale(g_nIconSize);
 
-                    const int x = rcSub.left + 2;
+                    const int x = rcSub.left + DPIScale(2);
                     const int y = rcSub.top + (rowHeight - iconSize) / 2; // vertically centered
 
                     ImageList_DrawEx(
@@ -333,7 +335,7 @@ namespace AT {
                 }
             } else if (col == 1) {
                 // Leave some margin at left
-                rcSub.left += 3;
+                rcSub.left += DPIScale(3);
 
                 // Draw title and subtext (if conflict process)
                 if (pWindowData->IsConflictProcess) {
@@ -354,7 +356,7 @@ namespace AT {
                 //DeleteObject(hPen);
 
                 // Leave some margin at left
-                rcSub.left += 4;
+                rcSub.left += DPIScale(4);
 
                 DrawTextWithHighlight(
                     hdc, rcSub, clrText, pWindowData->ProcessName, pWindowData->ProcessNameHighlights);
@@ -364,10 +366,11 @@ namespace AT {
         // Draw close button if hot-tracked
         if (g_Settings.ShowDeleteButton && (lpDrawItemStruct->itemState & ODS_HOTLIGHT || g_nLVHotItem == rowIndex)) {
             // Draw close button at the right side of the item
-            g_rcBtnClose.left   = rcItem.right - g_nIconSize - 1;
-            g_rcBtnClose.top    = rcItem.top + 1;
-            g_rcBtnClose.right  = g_rcBtnClose.left + g_nIconSize;
-            g_rcBtnClose.bottom = g_rcBtnClose.bottom + g_nIconSize;
+            const int closeBtnSize = DPIScale(g_nIconSize);
+            g_rcBtnClose.left   = rcItem.right - closeBtnSize - DPIScale(1);
+            g_rcBtnClose.top    = rcItem.top + DPIScale(1);
+            g_rcBtnClose.right  = g_rcBtnClose.left + closeBtnSize;
+            g_rcBtnClose.bottom = g_rcBtnClose.top + closeBtnSize;
 
             const int imgIndex = g_IsMouseOverCloseButton ? g_nImgCloseActiveInd : g_nImgCloseInactiveInd;
             ImageList_DrawEx(
@@ -376,8 +379,8 @@ namespace AT {
                 hdc,
                 g_rcBtnClose.left,
                 g_rcBtnClose.top,
-                g_nIconSize,
-                g_nIconSize,
+                closeBtnSize,
+                closeBtnSize,
                 CLR_NONE,
                 CLR_NONE,
                 ILD_TRANSPARENT);
@@ -680,14 +683,14 @@ void RefreshAltTabWindow() {
         }
     }
 
-    const int imageWidth = g_nIconSize;
-    const int imageHeight = g_nIconSize;
+    const int scaledIconSize = DPIScale(g_nIconSize);
 
     // Create ImageList and add icons, assign a dummy ImageList to set the row height
     // The row height is determined by the height of the icons in the ImageList assigned as LVSIL_SMALL
     // But the icons in the ImageList are drawn using the ImageList g_hLVImageList.
-    HIMAGELIST hImageListDummy = ImageList_Create(imageWidth, imageHeight + 1, ILC_COLOR32 | ILC_MASK, 0, 1);
-    HIMAGELIST hImageList = ImageList_Create(imageWidth, imageHeight, ILC_COLOR32 | ILC_MASK, 0, 1);
+    const int rowPadding = DPIScale(4);
+    HIMAGELIST hImageListDummy = ImageList_Create(scaledIconSize, scaledIconSize + rowPadding, ILC_COLOR32 | ILC_MASK, 0, 1);
+    HIMAGELIST hImageList = ImageList_Create(scaledIconSize, scaledIconSize, ILC_COLOR32 | ILC_MASK, 0, 1);
 
     for (const auto& item : g_AltTabWindows) {
         ImageList_AddIcon(hImageList, item.hIcon);
@@ -871,7 +874,7 @@ void AddListViewItem(HWND hListView, int index, const AltTabWindowData& windowDa
     ListView_SetItemText(hListView, index, 2, const_cast<wchar_t*>(windowData.ProcessName.c_str()));
 }
 
-static void CustomizeListView(HWND hListView, int dpi) {
+static void CustomizeListView(HWND hListView) {
     // Set extended style for the List View control
     DWORD dwExStyle = LVS_EX_FULLROWSELECT | LVS_EX_DOUBLEBUFFER;
     ListView_SetExtendedListViewStyle(hListView, dwExStyle);
@@ -882,27 +885,28 @@ static void CustomizeListView(HWND hListView, int dpi) {
     LVCOLUMN lvCol   = {0};
     lvCol.mask       = LVCF_TEXT | LVCF_WIDTH;
     lvCol.pszText    = (LPWSTR)L"#";
-    lvCol.cx         = ScaleValueForDPI(GetColIconWidth(), dpi);
+    lvCol.cx         = GetColIconWidth();
     ListView_InsertColumn(hListView, 0, &lvCol);
 
     if (g_Settings.ShowColProcessName) {
+        const int procNameWidth = GetColProcessNameWidth();
         lvCol.pszText = (LPWSTR)L"Window Title";
-        lvCol.cx      = colTitleWidth - COL_PROCNAME_WIDTH;
+        lvCol.cx      = colTitleWidth - procNameWidth;
         ListView_InsertColumn(hListView, 1, &lvCol);
 
         lvCol.pszText = (LPWSTR)L"Process Name";
-        lvCol.cx      = COL_PROCNAME_WIDTH - 2;
+        lvCol.cx      = procNameWidth - DPIScale(2);
         ListView_InsertColumn(hListView, 2, &lvCol);
     } else {
         lvCol.pszText = (LPWSTR)L"Window Title";
-        lvCol.cx      = colTitleWidth - 2;
+        lvCol.cx      = colTitleWidth - DPIScale(2);
         ListView_InsertColumn(hListView, 1, &lvCol);
     }
 }
 
-#define FONT_POINT(hdc, p) (-MulDiv(p, GetDeviceCaps(hdc, LOGPIXELSY), 72))
+#define FONT_POINT(dpi, p) (-MulDiv(p, dpi, 72))
 
-HFONT CreateFontEx(HDC hdc, const std::wstring& fontName, int fontSize, const std::wstring& fontStyle) {
+HFONT CreateFontEx(int dpi, const std::wstring& fontName, int fontSize, const std::wstring& fontStyle) {
     std::unordered_map<std::wstring, int> fontStyleMap = {
         { L"normal"     , FW_NORMAL },
         { L"italic"     , FW_NORMAL },
@@ -915,7 +919,7 @@ HFONT CreateFontEx(HDC hdc, const std::wstring& fontName, int fontSize, const st
 
     // Create a font for the static text control
     return CreateFontW(
-        FONT_POINT(hdc, fontSize), // Font height
+        FONT_POINT(dpi, fontSize), // Font height
         0,                         // Width of each character in the font
         0,                         // Angle of escapement
         0,                         // Orientation angle
@@ -1465,13 +1469,16 @@ LRESULT CALLBACK ListViewSubclassProc(
 }
 
 void WindowResizeAndPosition(HWND hWnd, int wndWidth, int wndHeight) {
-    // Get the dimensions of the screen
-    int screenWidth = GetSystemMetrics(SM_CXSCREEN);
-    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+    // Get the dimensions of the current monitor's work area
+    HMONITOR hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTOPRIMARY);
+    MONITORINFO mi = { sizeof(mi) };
+    GetMonitorInfo(hMonitor, &mi);
+    int screenWidth  = mi.rcWork.right - mi.rcWork.left;
+    int screenHeight = mi.rcWork.bottom - mi.rcWork.top;
 
-    // Calculate the position to center the window
-    int xPos = (screenWidth - wndWidth) / 2;
-    int yPos = (screenHeight - wndHeight) / 2;
+    // Calculate the position to center the window on the current monitor
+    int xPos = mi.rcWork.left + (screenWidth - wndWidth) / 2;
+    int yPos = mi.rcWork.top + (screenHeight - wndHeight) / 2;
 
     // Set the window position
     SetWindowPos(hWnd, HWND_TOP, xPos, yPos, wndWidth, wndHeight, SWP_NOSIZE | SWP_SHOWWINDOW);
@@ -1479,7 +1486,7 @@ void WindowResizeAndPosition(HWND hWnd, int wndWidth, int wndHeight) {
 
 int GetColProcessNameWidth() {
     if (g_Settings.ShowColProcessName) {
-        return COL_PROCNAME_WIDTH;
+        return DPIScale(180);
     }
     return 0;
 }
@@ -1984,13 +1991,22 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
     g_hAltTabWnd = hWnd;
     AT_LOG_INFO("AltTab Window Handle: [%#08X]", g_hAltTabWnd);
 
-    // Get a device context and DPI early so we can scale WindowMaxWidth
+    // Get a device context and per-monitor DPI
     HDC hdc = GetDC(hWnd);
-    int dpi = GetDeviceCaps(hdc, LOGPIXELSX);
+    int dpi = GetDPIForWindow(hWnd);
+    g_nDpi  = dpi;
 
-    // Get screen width and height
-    const int screenWidth  = GetSystemMetrics(SM_CXSCREEN);
-    const int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+    // Re-initialize close button image list at the correct DPI-scaled size
+    InitImageList();
+
+    // Get screen dimensions from the monitor the window is on
+    HMONITOR hMonitor = MonitorFromWindow(hWnd, MONITOR_DEFAULTTOPRIMARY);
+    MONITORINFO mi = { sizeof(mi) };
+    GetMonitorInfo(hMonitor, &mi);
+    const int screenWidth  = mi.rcWork.right - mi.rcWork.left;
+    const int screenHeight = mi.rcWork.bottom - mi.rcWork.top;
+    const int screenX      = mi.rcWork.left;
+    const int screenY      = mi.rcWork.top;
 
     // Compute the window size (e.g., 80% of the screen width and height)
     int windowWidth = static_cast<int>(screenWidth * g_Settings.WidthPercentage * 0.01);
@@ -2001,9 +2017,9 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
         windowWidth = min(windowWidth, ScaleValueForDPI(g_Settings.WindowMaxWidth, dpi));
     }
 
-    // Compute the window position (centered on the screen)
-    const int windowX = (screenWidth - windowWidth) / 2;
-    const int windowY = (screenHeight - windowHeight) / 2;
+    // Compute the window position (centered on the current monitor)
+    const int windowX = screenX + (screenWidth - windowWidth) / 2;
+    const int windowY = screenY + (screenHeight - windowHeight) / 2;
     DWORD style = WS_VISIBLE | WS_CHILD | LVS_REPORT | LVS_SHOWSELALWAYS | LVS_OWNERDRAWFIXED;
     if (!g_Settings.ShowColHeader) {
         style |= LVS_NOCOLUMNHEADER;
@@ -2013,8 +2029,8 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
     int searchStringHeight = 24;
 
     // Calculate the required height for the static control based on font size
-    g_hSSFont = CreateFontEx(hdc, g_Settings.SSFontName, g_Settings.SSFontSize, g_Settings.SSFontStyle);
-    g_hLVFont = CreateFontEx(hdc, g_Settings.LVFontName, g_Settings.LVFontSize, g_Settings.LVFontStyle);
+    g_hSSFont = CreateFontEx(dpi, g_Settings.SSFontName, g_Settings.SSFontSize, g_Settings.SSFontStyle);
+    g_hLVFont = CreateFontEx(dpi, g_Settings.LVFontName, g_Settings.LVFontSize, g_Settings.LVFontStyle);
 
     SelectObject(hdc, g_hSSFont);
 
@@ -2073,8 +2089,8 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
     // height is reduced by 3 (-3)
     //  1 pixel for the static text control and listView control overlap
     //  2 pixels for the upper and bottom border in listview control
-    width = windowWidth - 1;
-    height = windowHeight - searchStringHeight - 3;
+    width = windowWidth - DPIScale(1);
+    height = windowHeight - searchStringHeight - DPIScale(3);
 
     // AT_LOG_INFO("ListViewControl: X: %d, Y: %d, width: %d, height: %d", X, Y, width, height);
 
@@ -2108,7 +2124,7 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
     g_Settings.WindowHeight = wndHeight;
 
     // Add header / columns
-    CustomizeListView(hListView, dpi);
+    CustomizeListView(hListView);
 
     // Set ListView background and font colors
     SetListViewCustomColors(hListView, g_Settings.LVBackgroundColor, g_Settings.LVFontColor);
@@ -2135,14 +2151,15 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
     }
 
     // Create ImageList and add icons
-    const int imageWidth = g_nIconSize;
-    const int imageHeight = g_nIconSize;
+    const int scaledIconSize = DPIScale(g_nIconSize);
 
     // Create ImageList and add icons, assign a dummy ImageList to set the row height
     // The row height is determined by the height of the icons in the ImageList assigned as LVSIL_SMALL
     // But the icons in the ImageList are drawn using the ImageList g_hLVImageList.
-    HIMAGELIST hImageListDummy = ImageList_Create(imageWidth, imageHeight + 1, ILC_COLOR32 | ILC_MASK, 0, 1);
-    HIMAGELIST hImageList = ImageList_Create(imageWidth, imageHeight, ILC_COLOR32 | ILC_MASK, 0, 1);
+    // The dummy ImageList adds vertical padding (2px above + 2px below the icon at 96 DPI).
+    const int rowPadding = DPIScale(4);
+    HIMAGELIST hImageListDummy = ImageList_Create(scaledIconSize, scaledIconSize + rowPadding, ILC_COLOR32 | ILC_MASK, 0, 1);
+    HIMAGELIST hImageList = ImageList_Create(scaledIconSize, scaledIconSize, ILC_COLOR32 | ILC_MASK, 0, 1);
 
     for (const auto& item : g_AltTabWindows) {
         ImageList_AddIcon(hImageList, item.hIcon);
@@ -2172,24 +2189,24 @@ BOOL ATW_OnCreate(HWND hWnd, LPCREATESTRUCT /*lpCreateStruct*/) {
     const int itemHeight =
         ListView_GetItemRect(g_hListView, 0, &rcListView, LVIR_BOUNDS) ? rcListView.bottom - rcListView.top : 0;
     const int itemCount = ListView_GetItemCount(g_hListView);
-    int requiredHeight = itemHeight * itemCount + headerHeight + searchStringHeight + 2;
+    int requiredHeight = itemHeight * itemCount + headerHeight + searchStringHeight + DPIScale(2);
 
     if (requiredHeight <= g_Settings.WindowHeight) {
         SetWindowPos(hWnd, HWND_TOPMOST, windowX, windowY, windowWidth, requiredHeight, SWP_NOZORDER);
         WindowResizeAndPosition(hWnd, wndWidth, requiredHeight);
     } else {
-        const int scrollBarWidth       = GetSystemMetrics(SM_CXVSCROLL);
+        const int scrollBarWidth       = GetSystemMetricsForDpi(SM_CXVSCROLL, dpi);
         const int processNameWidth     = GetColProcessNameWidth();
-        const int colTitleWidth        = g_Settings.WindowWidth - (GetColIconWidth() + processNameWidth) - scrollBarWidth - 2;
+        const int colTitleWidth        = g_Settings.WindowWidth - (GetColIconWidth() + processNameWidth) - scrollBarWidth - DPIScale(2);
         const int numberOfVisibleItems = (g_Settings.WindowHeight - itemHeight + 1) / itemHeight;
         const int lvHeight             = numberOfVisibleItems * itemHeight + headerHeight;
 
-        requiredHeight = lvHeight + searchStringHeight + 2;
+        requiredHeight = lvHeight + searchStringHeight + DPIScale(2);
 
         ListView_SetColumnWidth(hListView, 1, colTitleWidth);
 
-        // Here, reducing the window width by 1 (-1) to fit the scrollbar properly in the window.
-        SetWindowPos(hListView, nullptr, 0, 0, windowWidth - 2, lvHeight, SWP_NOMOVE | SWP_NOZORDER);
+        // Here, reducing the window width to fit the scrollbar properly in the window.
+        SetWindowPos(hListView, nullptr, 0, 0, windowWidth - DPIScale(2), lvHeight, SWP_NOMOVE | SWP_NOZORDER);
         SetWindowPos(hWnd, HWND_TOPMOST, windowX, windowY, windowWidth, requiredHeight, SWP_NOZORDER);
         WindowResizeAndPosition(hWnd, wndWidth, requiredHeight);
     }
@@ -2465,17 +2482,18 @@ INT_PTR CALLBACK ATAboutDlgProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM l
         SendMessageW(hDlg, WM_SETICON, ICON_SMALL, (LPARAM)hIcon);
         SendMessageW(hDlg, WM_SETICON, ICON_BIG, (LPARAM)hIcon);
 
-        // Center the dialog on the screen
-        int screenWidth  = GetSystemMetrics(SM_CXSCREEN);
-        int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+        // Center the dialog on the current monitor
+        HMONITOR hMon = MonitorFromWindow(hDlg, MONITOR_DEFAULTTOPRIMARY);
+        MONITORINFO monInfo = { sizeof(monInfo) };
+        GetMonitorInfo(hMon, &monInfo);
         RECT dlgRect;
         GetWindowRect(hDlg, &dlgRect);
 
         int dlgWidth  = dlgRect.right - dlgRect.left;
         int dlgHeight = dlgRect.bottom - dlgRect.top;
 
-        int posX = (screenWidth  - dlgWidth ) / 2;
-        int posY = (screenHeight - dlgHeight) / 2;
+        int posX = monInfo.rcWork.left + (monInfo.rcWork.right - monInfo.rcWork.left - dlgWidth) / 2;
+        int posY = monInfo.rcWork.top + (monInfo.rcWork.bottom - monInfo.rcWork.top - dlgHeight) / 2;
 
         SetWindowPos(hDlg, HWND_TOP, posX, posY, 0, 0, SWP_NOSIZE);
         // Set the dialog as an app window, otherwise not displayed in task bar
@@ -2852,7 +2870,7 @@ HBITMAP LoadPngAsHBITMAP(HINSTANCE hInst, int resID, int cx, int cy) {
 }
 
 void InitImageList() {
-    const int imageSize = g_nIconSize;
+    const int imageSize = DPIScale(g_nIconSize);
 
     // Destroy the old image list if it exists (e.g., when settings are reloaded)
     if (g_hImageList) {
